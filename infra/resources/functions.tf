@@ -83,6 +83,10 @@ module "functions_app" {
     COSMOSDB_NAME = azurerm_cosmosdb_sql_database.db_importadesioni.name
     COSMOSDB_URI  = module.cosmosdb_account.endpoint
     COSMOSDB_KEY  = module.cosmosdb_account.primary_key
+
+    # Selfcare connection
+    SELFCARE_API_URL = "" # TBD
+    SELFCARE_API_KEY = "" # TBD
   }
 
   internal_storage = {
