@@ -15,7 +15,7 @@ variable "vnet_name" {
 }
 
 variable "cidr_subnet" {
-  type        = list(string)
+  type        = string
   description = "Subnet address space."
 }
 
@@ -32,19 +32,13 @@ data "azurerm_virtual_network" "vnet_common" {
   resource_group_name = data.azurerm_resource_group.vnet_common_rg.name
 }
 
-data "azurerm_subnet" "azdoa_snet" {
-  name                 = "azure-devops"
-  virtual_network_name = data.azurerm_virtual_network.vnet_common.name
-  resource_group_name  = data.azurerm_resource_group.vnet_common_rg.name
-}
-
 #
 # SNET definition
 #
 
 module "app_snet" {
   source                                         = "git::https://github.com/pagopa/azurerm.git//subnet?ref=v1.0.51"
-  name                                           = format("%s-%s-snet-%d", var.application_basename, local.project)
+  name                                           = format("%s-%s-snet", local.project, var.application_basename)
   address_prefixes                               = [var.cidr_subnet]
   resource_group_name                            = data.azurerm_resource_group.vnet_common_rg.name
   virtual_network_name                           = data.azurerm_virtual_network.vnet_common.name

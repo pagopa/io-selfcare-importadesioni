@@ -28,3 +28,10 @@ variable "application_basename" {
   type    = string
   default = "importadesioni"
 }
+
+variable "tags" {
+  type = map(any)
+  default = {
+    CreatedBy = "Terraform"
+  }
+}

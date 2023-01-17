@@ -45,7 +45,7 @@ module "functions_app" {
   source = "git::https://github.com/pagopa/azurerm.git//function_app?ref=v3.4.0"
 
   resource_group_name = azurerm_resource_group.rg.name
-  name                = format("%s-%s-fn", var.application_basename, local.project)
+  name                = format("%s-%s-fn", local.project, var.application_basename)
   location            = var.location
   health_check_path   = "/api/v1/info"
 
@@ -85,11 +85,23 @@ module "functions_app" {
     COSMOSDB_KEY  = module.cosmosdb_account.primary_key
   }
 
+  internal_storage = {
+    "enable"                     = true,
+    "private_endpoint_subnet_id" = module.app_snet.id
+    "queues"                     = ["process-adesione", "process-adesione-poison"],
+    "private_dns_zone_blob_ids"  = [],
+    "private_dns_zone_queue_ids" = [],
+    "private_dns_zone_table_ids" = [],
+    "containers"                 = [],
+    "blobs_retention_days"       = 0,
+  }
+
+
   subnet_id = module.app_snet.id
 
-  allowed_subnets = [
-    data.azurerm_subnet.azdoa_snet.id,
-  ]
+  allowed_subnets = []
+
+  application_insights_instrumentation_key = "" # empty for now
 
   tags = var.tags
 }
