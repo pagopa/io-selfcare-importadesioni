@@ -77,7 +77,7 @@ stages:
           - publish: $(System.DefaultWorkingDirectory)/bundle
             artifact: Bundle
 
-  - stage: Deploy_to_Production_Slot
+  - stage: Deploy_to_Production
     dependsOn:
       - Prepare_artifact
     jobs:
@@ -99,7 +99,8 @@ stages:
               slotName: 'production'
             displayName: Deploy code
 
-  - stage: Deploy_to_DryRun_Slot
+
+  - stage: Deploy_to_Dev
     dependsOn:
       - Prepare_artifact
     jobs:
@@ -111,12 +112,12 @@ stages:
           
           - task: AzureFunctionApp@1  
             inputs:
-              azureSubscription: '$(PRODUCTION_AZURE_SUBSCRIPTION)'
-              resourceGroupName: "$(PRODUCTION_RESOURCE_GROUP_NAME)"
+              azureSubscription: '$(DEV_AZURE_SUBSCRIPTION)'
+              resourceGroupName: "$(DEV_RESOURCE_GROUP_NAME)"
               appType: 'functionApp'
-              appName: "$(PRODUCTION_APP_NAME)"
+              appName: "$(DEV_APP_NAME)"
               package: '$(Pipeline.Workspace)/Bundle'
               deploymentMethod: 'auto'
               deployToSlotOrASE: true
-              slotName: 'dryrun'
+              slotName: 'production'
             displayName: Deploy code
