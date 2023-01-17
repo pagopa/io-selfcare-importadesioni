@@ -26,18 +26,6 @@ module "cosmosdb_account" {
   tags = var.tags
 }
 
-# Where source documents are
-resource "azurerm_cosmosdb_sql_database" "db_importadesioni_source" {
-  name                = "importadesioni_source"
-  resource_group_name = azurerm_resource_group.rg.name
-  account_name        = module.cosmosdb_account.name
-
-  autoscale_settings {
-    max_throughput = 1000
-  }
-}
-
-# Used by the application to keep track of the process
 resource "azurerm_cosmosdb_sql_database" "db_importadesioni" {
   name                = "importadesioni"
   resource_group_name = azurerm_resource_group.rg.name
@@ -47,15 +35,3 @@ resource "azurerm_cosmosdb_sql_database" "db_importadesioni" {
     max_throughput = 1000
   }
 }
-
-# Used by the DryRun instance as a clone of db_importadesioni
-resource "azurerm_cosmosdb_sql_database" "db_importadesioni_dryrun" {
-  name                = "importadesioni_dryrun"
-  resource_group_name = azurerm_resource_group.rg.name
-  account_name        = module.cosmosdb_account.name
-
-  autoscale_settings {
-    max_throughput = 1000
-  }
-}
-
