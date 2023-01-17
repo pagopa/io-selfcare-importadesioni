@@ -34,3 +34,32 @@ resource "azurerm_cosmosdb_sql_database" "db_importadesioni" {
     max_throughput = 4000
   }
 }
+
+### Containers
+locals {
+  database_containers = [
+    # Add a container to the database by adding an item with the following structure:
+    # {
+    #   name               = "<container_name>"
+    #   partition_key_path = "/<pk_field>"
+    #   autoscale_settings = {
+    #     max_throughput = 6000
+    #   },
+    # },
+  ]
+}
+
+module "db_importadesioni_containers" {
+  source   = "git::https://github.com/pagopa/azurerm.git//cosmosdb_sql_container?ref=v2.15.1"
+  for_each = { for c in local.database_containers : c.name => c }
+
+  name                = each.value.name
+  resource_group_name = azurerm_resource_group.rg.name
+  account_name        = module.cosmosdb_account.name
+  database_name       = azurerm_cosmosdb_sql_database.db_importadesioni.name
+  partition_key_path  = each.value.partition_key_path
+  throughput          = lookup(each.value, "throughput", null)
+
+  autoscale_settings = lookup(each.value, "autoscale_settings", null)
+
+}
