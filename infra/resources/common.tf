@@ -35,3 +35,7 @@ variable "tags" {
     CreatedBy = "Terraform"
   }
 }
+
+locals {
+  project = "${var.prefix}-${var.env_short}"
+}
