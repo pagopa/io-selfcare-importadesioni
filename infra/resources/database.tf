@@ -38,14 +38,34 @@ resource "azurerm_cosmosdb_sql_database" "db_importadesioni" {
 ### Containers
 locals {
   database_containers = [
-    # Add a container to the database by adding an item with the following structure:
-    # {
-    #   name               = "<container_name>"
-    #   partition_key_path = "/<pk_field>"
-    #   autoscale_settings = {
-    #     max_throughput = 6000
-    #   },
-    # },
+    {
+      name               = "Contratto"
+      partition_key_path = "/ID"
+      autoscale_settings = {
+        max_throughput = 4000
+      }
+    },
+    {
+      name               = "Allegato"
+      partition_key_path = "/ID"
+      autoscale_settings = {
+        max_throughput = 4000
+      }
+    },
+    {
+      name               = "Delegato"
+      partition_key_path = "/ID"
+      autoscale_settings = {
+        max_throughput = 4000
+      }
+    },
+    {
+      name               = "SoggettoAggregato"
+      partition_key_path = "/ID"
+      autoscale_settings = {
+        max_throughput = 4000
+      }
+    },
   ]
 }
 
