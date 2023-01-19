@@ -10,7 +10,7 @@ module "cosmosdb_account" {
   kind                = "GlobalDocumentDB"
 
   public_network_access_enabled     = false
-  private_endpoint_enabled          = true
+  private_endpoint_enabled          = false
   subnet_id                         = module.app_snet.id
   is_virtual_network_filter_enabled = false
 

@@ -90,7 +90,7 @@ module "functions_app" {
   }
 
   internal_storage = {
-    "enable"                     = true,
+    "enable"                     = false,
     "private_endpoint_subnet_id" = module.app_snet.id
     "queues"                     = ["process-adesione", "process-adesione-poison"],
     "private_dns_zone_blob_ids"  = [],
