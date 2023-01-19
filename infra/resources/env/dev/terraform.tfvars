@@ -12,7 +12,7 @@ tags = {
 ## Network
 vnet_common_rg = "io-d-rg-common"
 vnet_name      = "io-d-vnet-common"
-cidr_subnet    = "10.0.142.0/26"
+cidr_subnet    = "10.1.1.0/24"
 
 ## Functions
 functions_kind              = "Linux"
