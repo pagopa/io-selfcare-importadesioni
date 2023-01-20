@@ -1,4 +1,13 @@
 # Database instance
+
+variable "cosmos_private_endpoint_enabled" {
+  type = bool
+}
+
+variable "cosmos_public_network_access_enabled" {
+  type = bool
+}
+
 module "cosmosdb_account" {
   source = "git::https://github.com/pagopa/azurerm.git//cosmosdb_account?ref=v2.15.1"
 
@@ -9,9 +18,10 @@ module "cosmosdb_account" {
   enable_free_tier    = false
   kind                = "GlobalDocumentDB"
 
-  public_network_access_enabled     = false
-  private_endpoint_enabled          = false
-  subnet_id                         = module.app_snet.id
+  public_network_access_enabled     = var.cosmos_public_network_access_enabled
+  private_endpoint_enabled          = var.cosmos_private_endpoint_enabled
+  private_dns_zone_ids              = var.env_short == "p" ? [data.azurerm_private_dns_zone.privatelink_documents_azure_com[0].id] : []
+  subnet_id                         = var.env_short == "p" ? data.azurerm_subnet.private_endpoints_subnet[0].id : null
   is_virtual_network_filter_enabled = false
 
   main_geo_location_location       = azurerm_resource_group.rg.location
@@ -22,6 +32,10 @@ module "cosmosdb_account" {
     max_staleness_prefix    = null
   }
 
+  capabilities = [
+    "EnableServerless"
+  ]
+
   tags = var.tags
 }
 
@@ -29,10 +43,6 @@ resource "azurerm_cosmosdb_sql_database" "db_importadesioni" {
   name                = "importadesioni"
   resource_group_name = azurerm_resource_group.rg.name
   account_name        = module.cosmosdb_account.name
-
-  autoscale_settings {
-    max_throughput = 4000
-  }
 }
 
 ### Containers
@@ -41,30 +51,18 @@ locals {
     {
       name               = "Contratto"
       partition_key_path = "/ID"
-      autoscale_settings = {
-        max_throughput = 4000
-      }
     },
     {
       name               = "Allegato"
       partition_key_path = "/ID"
-      autoscale_settings = {
-        max_throughput = 4000
-      }
     },
     {
       name               = "Delegato"
       partition_key_path = "/ID"
-      autoscale_settings = {
-        max_throughput = 4000
-      }
     },
     {
       name               = "SoggettoAggregato"
       partition_key_path = "/ID"
-      autoscale_settings = {
-        max_throughput = 4000
-      }
     },
   ]
 }
@@ -78,8 +76,4 @@ module "db_importadesioni_containers" {
   account_name        = module.cosmosdb_account.name
   database_name       = azurerm_cosmosdb_sql_database.db_importadesioni.name
   partition_key_path  = each.value.partition_key_path
-  throughput          = lookup(each.value, "throughput", null)
-
-  autoscale_settings = lookup(each.value, "autoscale_settings", null)
-
 }

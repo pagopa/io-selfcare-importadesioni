@@ -21,3 +21,6 @@ functions_sku_size          = "S1"
 functions_autoscale_minimum = 1
 functions_autoscale_maximum = 3
 functions_autoscale_default = 1
+
+cosmos_private_endpoint_enabled = true
+cosmos_public_network_access_enabled = false
