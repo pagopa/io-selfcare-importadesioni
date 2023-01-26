@@ -9,7 +9,7 @@ variable "cosmos_public_network_access_enabled" {
 }
 
 module "cosmosdb_account" {
-  source = "git::https://github.com/pagopa/azurerm.git//cosmosdb_account?ref=v2.15.1"
+  source = "git::https://github.com/pagopa/azurerm.git//cosmosdb_account?ref=v4.3.2"
 
   name                = format("%s-cosmos-%s", local.project, var.application_basename)
   location            = azurerm_resource_group.rg.location
@@ -17,6 +17,7 @@ module "cosmosdb_account" {
   offer_type          = "Standard"
   enable_free_tier    = false
   kind                = "GlobalDocumentDB"
+  domain              = "SELFCARE"
 
   public_network_access_enabled     = var.cosmos_public_network_access_enabled
   private_endpoint_enabled          = var.cosmos_private_endpoint_enabled

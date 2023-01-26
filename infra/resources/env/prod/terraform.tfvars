@@ -12,7 +12,7 @@ tags = {
 ## Network
 vnet_common_rg = "io-p-rg-common"
 vnet_name      = "io-p-vnet-common"
-cidr_subnet    = ["10.0.0.0/24"]
+cidr_subnet    = "10.0.134.0/26"
 
 ## Functions
 functions_kind              = "Linux"
@@ -22,5 +22,5 @@ functions_autoscale_minimum = 1
 functions_autoscale_maximum = 3
 functions_autoscale_default = 1
 
-cosmos_private_endpoint_enabled = true
+cosmos_private_endpoint_enabled      = true
 cosmos_public_network_access_enabled = false
