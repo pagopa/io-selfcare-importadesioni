@@ -65,6 +65,14 @@ locals {
       name               = "SoggettoAggregato"
       partition_key_path = "/ID"
     },
+    {
+      name               = "memberships"
+      partition_key_path = "/ipaCode"
+    },
+    {
+      name               = "contracts"
+      partition_key_path = "/ipaCode"
+    }
   ]
 }
 
