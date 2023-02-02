@@ -1,0 +1,39 @@
+{
+  "bindings": [
+    {
+      "authLevel": "function",
+      "type": "cosmosDBTrigger",
+      "direction": "in",
+      "name": "documents",
+      "connectionStringSetting": "COSMOSDB_CONNECTIONSTRING",
+      "databaseName": "%COSMOSDB_NAME%",
+      "collectionName": "%COSMOSDB_PAST_MEMBERSHIP_COLLECTION%",
+      "leaseCollectionName": "%COSMOSDB_PAST_MEMBERSHIP_LEASE_COLLECTION%",
+      "createLeaseCollectionIfNotExists": true,
+      "startFromBeginning": true
+    },
+    {
+      "name": "ipaOpenData",
+      "type": "blob",
+      "path": "%IPA_OPEN_DATA_STORAGE_PATH%",
+      "connection": "AzureWebJobsStorage",
+      "direction": "in",
+      "dataType": "stream"
+    },
+    // {
+    //   "name": "membership",
+    //   "type": "cosmosDB",
+    //   "databaseName": "%COSMOSDB_NAME%",
+    //   "collectionName": "%COSMOSDB_MEMBERSHIP_COLLECTION%",
+    //   "createIfNotExists": true,
+    //   "connectionStringSetting": "COSMOSDB_CONNECTIONSTRING",
+    //   "direction": "out"
+    // },
+    {
+      "type": "http",
+      "direction": "out",
+      "name": "res"
+    }
+  ],
+  "scriptFile": "../dist/OnContractChange/index.js"
+}

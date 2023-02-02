@@ -1,5 +1,5 @@
 /**
- * Use a singleton CosmosDB client across functions.
+ * Use a singleton CosmosDB database across functions.
  */
 import { CosmosClient } from "@azure/cosmos";
 import { getConfigOrThrow } from "./config";
@@ -7,8 +7,9 @@ import { getConfigOrThrow } from "./config";
 const config = getConfigOrThrow();
 const cosmosDbUri = config.COSMOSDB_URI;
 const masterKey = config.COSMOSDB_KEY;
+const name = config.COSMOSDB_NAME;
 
-export const cosmosdbClient = new CosmosClient({
+export const cosmosdb = new CosmosClient({
   endpoint: cosmosDbUri,
   key: masterKey
-});
+}).database(name);
