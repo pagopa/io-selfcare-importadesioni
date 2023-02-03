@@ -9,6 +9,13 @@ import * as E from "fp-ts/lib/Either";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { ReadIpaData } from "./ipa";
 import { Dao } from "./dao";
+import {
+  FetchMembershipError,
+  FiscalCodeNotFoundError,
+  UpsertError,
+  ValidationError
+} from "./error";
+import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 
 enum TipoContrattoEnum {
   // MANUAL = "Ins. Manuale",
@@ -27,11 +34,11 @@ const TipoContratto = enumType<TipoContrattoEnum>(
 type TipoContratto = t.TypeOf<typeof TipoContratto>;
 
 const PecContract = t.interface({
-  codiceIPA: NonEmptyString,
-  id: NonNegativeNumber,
-  idAllegato: NonNegativeNumber,
-  idEmail: NonNegativeNumber,
-  tipoContratto: TipoContratto
+  CODICEIPA: NonEmptyString,
+  ID: NonNegativeNumber,
+  IDALLEGATO: NonNegativeNumber,
+  IDEMAIL: NonNegativeNumber,
+  TIPOCONTRATTO: TipoContratto
 });
 
 type PecContract = t.TypeOf<typeof PecContract>;
@@ -42,7 +49,7 @@ type MembershipDecoratedPecContract = PecContract & {
 
 type IpaDecoratedPecContract = PecContract & {
   readonly isEnteCentrale: boolean;
-  readonly ipaFiscalCode: string;
+  readonly ipaFiscalCode?: string;
 };
 
 enum TipoDelegatoEnum {
@@ -93,24 +100,21 @@ type AttachmentDecoratedPecContract = DelegatesDecoratedPecContract & {
 
 const fetchMembership = (dao: Dao) => (
   contract: PecContract
-): TE.TaskEither<Error, MembershipDecoratedPecContract> =>
+): TE.TaskEither<unknown, MembershipDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
       () =>
-        dao("memberships").readItemById(contract.codiceIPA, contract.codiceIPA),
+        dao("memberships").readItemById(contract.CODICEIPA, contract.CODICEIPA),
       E.toError
     ),
     TE.map(response => response.statusCode),
-    TE.chain(
-      flow(
-        E.fromPredicate(
-          statusCode => statusCode === 200 || statusCode === 404,
-          statusCode =>
-            new Error(
-              `Database find relationship by id for codiceIPA = '${contract.codiceIPA}' failed with status code = '${statusCode}'`
-            ) // FIXME: retry?
-        ),
-        TE.fromEither
+    TE.chainEitherK(
+      E.fromPredicate(
+        statusCode => statusCode === 200 || statusCode === 404,
+        statusCode =>
+          new FetchMembershipError(
+            `Database find relationship by id for codiceIPA = '${contract.CODICEIPA}' failed with status code = '${statusCode}'`
+          ) // FIXME: retry?
       )
     ),
     TE.map(statusCode => ({
@@ -121,50 +125,56 @@ const fetchMembership = (dao: Dao) => (
 
 const decorateFromIPA = (context: Context, readIpaData: ReadIpaData) => (
   contract: PecContract
-): TE.TaskEither<Error, IpaDecoratedPecContract> =>
+): TE.TaskEither<unknown, IpaDecoratedPecContract> =>
   pipe(
     TE.tryCatch(() => readIpaData(context.bindings.ipaOpenData), E.toError),
-    TE.bindTo("ipaOpenData"),
-    TE.bind("ipaDecoratedContract", ({ ipaOpenData }) =>
-      TE.of({
-        ...contract,
-        isEnteCentrale: ipaOpenData.has(contract.codiceIPA)
-      })
-    ),
-    TE.chain(({ ipaOpenData, ipaDecoratedContract }) =>
-      pipe(
-        ipaDecoratedContract.codiceIPA,
-        ipaOpenData.get,
-        E.fromNullable(
-          new Error(
-            `Fiscal Code not found in IPA Open Data for IPA code '${ipaDecoratedContract.codiceIPA}'`
+    TE.map(ipaOpenData => {
+      console.log(ipaOpenData);
+      return ipaOpenData;
+    }),
+    TE.map(ipaOpenData => ({
+      ...contract,
+      ipaFiscalCode: ipaOpenData.get(contract.CODICEIPA),
+      isEnteCentrale: ipaOpenData.has(contract.CODICEIPA)
+    })),
+    TE.chainEitherK(
+      E.fromPredicate(
+        ipaDecoratedContract =>
+          !(
+            ipaDecoratedContract.isEnteCentrale &&
+            !ipaDecoratedContract.ipaFiscalCode
+          ),
+        ipaDecoratedContract =>
+          new FiscalCodeNotFoundError(
+            `Fiscal Code not found in IPA Open Data for IPA code '${ipaDecoratedContract.CODICEIPA}'`
           )
-        ),
-        E.map(fiscalCode => ({
-          ...ipaDecoratedContract,
-          ipaFiscalCode: fiscalCode
-        })),
-        TE.fromEither
       )
     )
   );
 
 const saveMembership = (dao: Dao) => (
   contract: IpaDecoratedPecContract
-): TE.TaskEither<Error, PecContract> =>
+): TE.TaskEither<unknown, PecContract> =>
   pipe(
-    TE.tryCatch(() => dao("memberships").upsert(contract), E.toError),
+    TE.tryCatch(
+      () =>
+        // TODO: what if this ope override an already processed (status = completed) membership?
+        dao("memberships").upsert({
+          id: contract.CODICEIPA,
+          ipaCode: contract.CODICEIPA,
+          mainInstitution: contract.isEnteCentrale,
+          status: "INITIAL"
+        }),
+      E.toError
+    ),
     TE.map(response => response.statusCode),
-    TE.chain(
-      flow(
-        E.fromPredicate(
-          statusCode => statusCode >= 200 && statusCode < 300,
-          statusCode =>
-            new Error(
-              `Database upsert relationship for codiceIPA = '${contract.codiceIPA}' failed with status code = '${statusCode}'`
-            ) // FIXME: retry?
-        ),
-        TE.fromEither
+    TE.chainEitherK(
+      E.fromPredicate(
+        statusCode => statusCode >= 200 && statusCode < 300,
+        statusCode =>
+          new UpsertError(
+            `Database upsert relationship for codiceIPA = '${contract.CODICEIPA}' failed with status code = '${statusCode}'`
+          ) // FIXME: retry?
       )
     ),
     TE.map(_ => contract)
@@ -172,7 +182,7 @@ const saveMembership = (dao: Dao) => (
 
 const fetchPecDelegates = (dao: Dao) => (
   contract: PecContract
-): TE.TaskEither<Error, DelegatesDecoratedPecContract> =>
+): TE.TaskEither<unknown, DelegatesDecoratedPecContract> =>
   pipe(
     TE.tryCatch(async () => {
       // eslint-disable-next-line functional/no-let, functional/prefer-readonly-type
@@ -185,7 +195,7 @@ const fetchPecDelegates = (dao: Dao) => (
           : undefined;
         response = await dao("Delegato").readItemsByQuery(
           {
-            parameters: [{ name: "@idAllegato", value: contract.idAllegato }],
+            parameters: [{ name: "@idAllegato", value: contract.IDALLEGATO }],
             query: "SELECT * FROM Delegato d WHERE d.IDALLEGATO = *@idAllegato*"
           },
           { continuationToken }
@@ -194,11 +204,10 @@ const fetchPecDelegates = (dao: Dao) => (
       } while (response.hasMoreResults);
       return delegates;
     }, E.toError),
-    TE.chain(
+    TE.chainEitherK(
       flow(
         RA.map(flow(PecDelegate.decode, E.mapLeft(E.toError))),
-        E.sequenceArray,
-        TE.fromEither
+        E.sequenceArray
       )
     ),
     TE.map(delegates => ({ ...contract, delegates }))
@@ -206,48 +215,51 @@ const fetchPecDelegates = (dao: Dao) => (
 
 const fetchPecAttachments = (dao: Dao) => (
   contract: DelegatesDecoratedPecContract
-): TE.TaskEither<Error, AttachmentDecoratedPecContract> =>
+): TE.TaskEither<unknown, AttachmentDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
       () =>
         dao("Allegato").readItemById(
-          contract.idAllegato.toString(),
-          contract.idAllegato
+          contract.IDALLEGATO.toString(),
+          contract.IDALLEGATO
         ),
       E.toError
     ),
-    TE.chain(
-      flow(
-        E.fromPredicate(
-          response => response.statusCode >= 200 && response.statusCode < 300,
-          response =>
-            new Error(
-              `Database find attachment by id = '${contract.idAllegato}' failed with status code = '${response.statusCode}'`
-            ) // FIXME: retry?
-        ),
-        TE.fromEither
+    TE.chainEitherK(
+      E.fromPredicate(
+        response => response.statusCode >= 200 && response.statusCode < 300,
+        response =>
+          new Error(
+            `Database find attachment by id = '${contract.IDALLEGATO}' failed with status code = '${response.statusCode}'`
+          ) // FIXME: retry?
       )
     ),
-    TE.chain(flow(PecAttachment.decode, E.mapLeft(E.toError), TE.fromEither)),
+    TE.chainEitherK(flow(PecAttachment.decode, E.mapLeft(E.toError))),
     TE.map(pecAttachment => ({ ...contract, attachment: pecAttachment }))
   );
 
 const saveContract = (dao: Dao) => (
   contract: AttachmentDecoratedPecContract
-): TE.TaskEither<Error, void> =>
+): TE.TaskEither<unknown, void> =>
   pipe(
-    TE.tryCatch(() => dao("contracts").upsert(contract), E.toError),
+    TE.tryCatch(
+      () =>
+        dao("contracts").upsert({
+          delegates: contract.delegates,
+          id: contract.ID.toString(),
+          ipaCode: contract.CODICEIPA,
+          version: contract.TIPOCONTRATTO
+        }),
+      E.toError
+    ),
     TE.map(response => response.statusCode),
-    TE.chain(
-      flow(
-        E.fromPredicate(
-          statusCode => statusCode >= 200 && statusCode < 300,
-          statusCode =>
-            new Error(
-              `Database upsert contracts for codiceIPA = '${contract.codiceIPA}' and id = '${contract.id}' failed with status code = '${statusCode}'`
-            ) // FIXME: retry?
-        ),
-        TE.fromEither
+    TE.chainEitherK(
+      E.fromPredicate(
+        statusCode => statusCode >= 200 && statusCode < 300,
+        statusCode =>
+          new Error(
+            `Database upsert contracts for codiceIPA = '${contract.CODICEIPA}' and id = '${contract.ID}' failed with status code = '${statusCode}'`
+          ) // FIXME: retry?
       )
     ),
     TE.map(_ => void 0)
@@ -262,9 +274,9 @@ const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
     RA.map(
       flow(
         PecContract.decode,
-        E.mapLeft(E.toError),
-        TE.fromEither, // TODO: is it necessary/required?
-        TE.chain(fetchMembership(dao)), // FIXME: return a boolean instead of an AdesioneDecoratedContractRecord?
+        E.mapLeft(e => new ValidationError(readableReport(e))),
+        TE.fromEither,
+        TE.chain(fetchMembership(dao)),
         TE.chain(membershipDecoratedContract =>
           membershipDecoratedContract.adesioneAlreadyInsert
             ? TE.right(membershipDecoratedContract)

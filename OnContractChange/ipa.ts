@@ -6,13 +6,13 @@ import { Transform } from "stream";
 import { parse } from "csv-parse";
 
 export type IpaCode = string;
-export type FiscalCode = string;
+export type FiscalCode = string | undefined;
 export type IpaOpenData = ReadonlyMap<IpaCode, FiscalCode>;
 
 export const readIpaData = async (
   stream: NodeJS.ReadableStream
 ): Promise<IpaOpenData> => {
-  const ipaCode2FiscalCode = new Map<string, string>();
+  const ipaCode2FiscalCode = new Map<string, string | undefined>();
   await pipeline(
     stream,
     parse({ delimiter: ",", from_line: 2 }),
