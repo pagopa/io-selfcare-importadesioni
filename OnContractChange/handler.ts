@@ -7,15 +7,18 @@ import { enumType } from "@pagopa/ts-commons/lib/types";
 import * as TE from "fp-ts/lib/TaskEither";
 import * as E from "fp-ts/lib/Either";
 import * as RA from "fp-ts/lib/ReadonlyArray";
+import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import { ReadIpaData } from "./ipa";
 import { Dao } from "./dao";
 import {
+  ValidationError,
   FetchMembershipError,
+  FetchPecDelegatesError,
   FiscalCodeNotFoundError,
   UpsertError,
-  ValidationError
+  FetchPecAttachmentError,
+  SaveContractError
 } from "./error";
-import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 
 enum TipoContrattoEnum {
   // MANUAL = "Ins. Manuale",
@@ -35,10 +38,9 @@ type TipoContratto = t.TypeOf<typeof TipoContratto>;
 
 const PecContract = t.interface({
   CODICEIPA: NonEmptyString,
-  ID: NonNegativeNumber,
   IDALLEGATO: NonNegativeNumber,
-  IDEMAIL: NonNegativeNumber,
-  TIPOCONTRATTO: TipoContratto
+  TIPOCONTRATTO: TipoContratto,
+  id: NonEmptyString
 });
 
 type PecContract = t.TypeOf<typeof PecContract>;
@@ -64,18 +66,17 @@ const TipoDelegato = enumType<TipoDelegatoEnum>(
 );
 type TipoDelegato = t.TypeOf<typeof TipoDelegato>;
 
-const PecDelegate = t.interface({
-  delegatoCorpoCentrale: NonNegativeNumber,
-  email: EmailString,
-  fiscalCode: NonEmptyString,
-  id: NonNegativeNumber,
-  idAllegato: NonNegativeNumber,
-  idEmail: NonNegativeNumber,
-  nominativo: NonEmptyString,
-  pec: t.string,
-  qualifica: NonEmptyString,
-  tipoDelegato: TipoDelegato
-});
+const PecDelegate = t.intersection([
+  t.interface({
+    CODICEFISCALE: NonEmptyString,
+    EMAIL: EmailString,
+    IDALLEGATO: NonNegativeNumber,
+    NOMINATIVO: NonEmptyString,
+    TIPODELEGATO: TipoDelegato,
+    id: NonEmptyString
+  }),
+  t.partial({ QUALIFICA: t.string })
+]);
 
 type PecDelegate = t.TypeOf<typeof PecDelegate>;
 
@@ -83,14 +84,15 @@ type DelegatesDecoratedPecContract = PecContract & {
   readonly delegates: ReadonlyArray<PecDelegate>;
 };
 
-const PecAttachment = t.interface({
-  id: NonNegativeNumber,
-  idEmail: NonNegativeNumber,
-  nomeAllegato: NonEmptyString,
-  nomeAllegatoNuovo: NonEmptyString,
-  pathAllegato: NonEmptyString,
-  tipoAllegato: NonEmptyString
-});
+const PecAttachment = t.intersection([
+  t.interface({
+    NOMEALLEGATO: NonEmptyString,
+    PATHALLEGATO: NonEmptyString,
+    TIPOALLEGATO: t.literal("Contratto"),
+    id: NonEmptyString
+  }),
+  t.partial({ NOMEALLEGATONUOVO: NonEmptyString })
+]);
 
 type PecAttachment = t.TypeOf<typeof PecAttachment>;
 
@@ -128,10 +130,6 @@ const decorateFromIPA = (context: Context, readIpaData: ReadIpaData) => (
 ): TE.TaskEither<unknown, IpaDecoratedPecContract> =>
   pipe(
     TE.tryCatch(() => readIpaData(context.bindings.ipaOpenData), E.toError),
-    TE.map(ipaOpenData => {
-      console.log(ipaOpenData);
-      return ipaOpenData;
-    }),
     TE.map(ipaOpenData => ({
       ...contract,
       ipaFiscalCode: ipaOpenData.get(contract.CODICEIPA),
@@ -160,12 +158,13 @@ const saveMembership = (dao: Dao) => (
       () =>
         // TODO: what if this ope override an already processed (status = completed) membership?
         dao("memberships").upsert({
+          fiscalCode: contract.ipaFiscalCode,
           id: contract.CODICEIPA,
           ipaCode: contract.CODICEIPA,
           mainInstitution: contract.isEnteCentrale,
           status: "INITIAL"
         }),
-      E.toError
+      e => new UpsertError(String(e))
     ),
     TE.map(response => response.statusCode),
     TE.chainEitherK(
@@ -184,57 +183,79 @@ const fetchPecDelegates = (dao: Dao) => (
   contract: PecContract
 ): TE.TaskEither<unknown, DelegatesDecoratedPecContract> =>
   pipe(
-    TE.tryCatch(async () => {
-      // eslint-disable-next-line functional/no-let, functional/prefer-readonly-type
-      let delegates: unknown[] = [];
-      // eslint-disable-next-line functional/no-let
-      let response;
-      do {
-        const continuationToken: string | undefined = response
-          ? response.continuationToken
-          : undefined;
-        response = await dao("Delegato").readItemsByQuery(
-          {
-            parameters: [{ name: "@idAllegato", value: contract.IDALLEGATO }],
-            query: "SELECT * FROM Delegato d WHERE d.IDALLEGATO = *@idAllegato*"
-          },
-          { continuationToken }
-        );
-        delegates = delegates.concat(response.resources);
-      } while (response.hasMoreResults);
-      return delegates;
-    }, E.toError),
+    TE.tryCatch(
+      async () => {
+        // eslint-disable-next-line functional/no-let, functional/prefer-readonly-type
+        let delegates: unknown[] = [];
+        // eslint-disable-next-line functional/no-let
+        let response;
+        do {
+          // TODO: how to manager query error?
+          response = await dao("pecDelegato").readItemsByQuery(
+            {
+              parameters: [{ name: "@idAllegato", value: contract.IDALLEGATO }],
+              query:
+                "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = *@idAllegato*"
+            },
+            {
+              continuationToken: response
+                ? response.continuationToken
+                : undefined
+            }
+          );
+          delegates = delegates.concat(response.resources);
+        } while (response.hasMoreResults);
+        return delegates;
+      },
+      e =>
+        new FetchPecDelegatesError(
+          `Failed to fetch delegates for attachment id = ${
+            contract.IDALLEGATO
+          }. Reason: ${String(e)}`
+        )
+    ),
     TE.chainEitherK(
       flow(
-        RA.map(flow(PecDelegate.decode, E.mapLeft(E.toError))),
-        E.sequenceArray
+        RA.map(
+          flow(
+            PecDelegate.decode,
+            E.mapLeft(e => new ValidationError(readableReport(e)))
+          )
+        ),
+        E.sequenceArray // TODO: how to "accumulate" errors?
       )
     ),
     TE.map(delegates => ({ ...contract, delegates }))
   );
 
-const fetchPecAttachments = (dao: Dao) => (
+const fetchPecAttachment = (dao: Dao) => (
   contract: DelegatesDecoratedPecContract
 ): TE.TaskEither<unknown, AttachmentDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
       () =>
-        dao("Allegato").readItemById(
+        dao("pecAllegato").readItemById(
           contract.IDALLEGATO.toString(),
           contract.IDALLEGATO
         ),
-      E.toError
+      e => new FetchPecAttachmentError(String(e))
     ),
     TE.chainEitherK(
       E.fromPredicate(
         response => response.statusCode >= 200 && response.statusCode < 300,
         response =>
-          new Error(
-            `Database find attachment by id = '${contract.IDALLEGATO}' failed with status code = '${response.statusCode}'`
+          new FetchPecAttachmentError(
+            `Database find pecAllegato by id = '${contract.IDALLEGATO}' failed with status code = '${response.statusCode}'`
           ) // FIXME: retry?
       )
     ),
-    TE.chainEitherK(flow(PecAttachment.decode, E.mapLeft(E.toError))),
+    TE.chainEitherK(
+      flow(
+        response => response.resource,
+        PecAttachment.decode,
+        E.mapLeft(e => new ValidationError(readableReport(e)))
+      )
+    ),
     TE.map(pecAttachment => ({ ...contract, attachment: pecAttachment }))
   );
 
@@ -244,21 +265,23 @@ const saveContract = (dao: Dao) => (
   pipe(
     TE.tryCatch(
       () =>
+        // TODO: this ope have to be idempotent in order to manage multiple execution (re-run) of the same item
         dao("contracts").upsert({
+          attachment: contract.attachment,
           delegates: contract.delegates,
-          id: contract.ID.toString(),
+          id: contract.id,
           ipaCode: contract.CODICEIPA,
           version: contract.TIPOCONTRATTO
         }),
-      E.toError
+      e => new SaveContractError(String(e))
     ),
     TE.map(response => response.statusCode),
     TE.chainEitherK(
       E.fromPredicate(
         statusCode => statusCode >= 200 && statusCode < 300,
         statusCode =>
-          new Error(
-            `Database upsert contracts for codiceIPA = '${contract.CODICEIPA}' and id = '${contract.ID}' failed with status code = '${statusCode}'`
+          new SaveContractError(
+            `Database upsert contracts for codiceIPA = '${contract.CODICEIPA}' and id = '${contract.id}' failed with status code = '${statusCode}'`
           ) // FIXME: retry?
       )
     ),
@@ -270,7 +293,7 @@ const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
   documents: unknown
 ): Promise<ReadonlyArray<void>> =>
   pipe(
-    Array.isArray(documents) ? documents : [documents],
+    Array.isArray(documents) ? documents : [documents], // TODO: how to manage "transactionality" for each element? If no transaction is needed, it means that this handler have to be idempotent
     RA.map(
       flow(
         PecContract.decode,
@@ -289,7 +312,7 @@ const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
         TE.chain(
           flow(
             fetchPecDelegates(dao),
-            TE.chain(fetchPecAttachments(dao)),
+            TE.chain(fetchPecAttachment(dao)),
             TE.chain(saveContract(dao))
           )
         )

@@ -20,15 +20,6 @@
       "direction": "in",
       "dataType": "stream"
     },
-    // {
-    //   "name": "membership",
-    //   "type": "cosmosDB",
-    //   "databaseName": "%COSMOSDB_NAME%",
-    //   "collectionName": "%COSMOSDB_MEMBERSHIP_COLLECTION%",
-    //   "createIfNotExists": true,
-    //   "connectionStringSetting": "COSMOSDB_CONNECTIONSTRING",
-    //   "direction": "out"
-    // },
     {
       "type": "http",
       "direction": "out",
