@@ -11,15 +11,77 @@ import {
   SqlQuerySpec
 } from "@azure/cosmos";
 
-const readItemById = (database: Database, containerId: string) => (
+export interface IMembership {
+  readonly fiscalCode?: string;
+  readonly id: string;
+  readonly ipaCode: string;
+  readonly mainInstitution: boolean;
+  readonly status: string;
+}
+
+export interface IDelegate {
+  readonly email: string;
+  readonly firstName: string;
+  readonly fiscalCode: string;
+  readonly id: string;
+  readonly attachmentId: number;
+  readonly kind: string;
+  readonly lastName: string;
+  readonly role?: string;
+}
+
+export interface IAttachment {
+  readonly id: string;
+  readonly name: string;
+  readonly path: string;
+  readonly kind: string;
+}
+
+export interface IContract {
+  readonly attachment: IAttachment;
+  readonly delegates: ReadonlyArray<IDelegate>;
+  readonly id: string;
+  readonly ipaCode: string;
+  readonly version: string;
+}
+interface IContainerItemMap {
+  readonly contracts: IContract;
+  readonly memberships: IMembership;
+  readonly pecDelegato: ItemDefinition;
+  readonly pecAllegato: ItemDefinition;
+}
+
+const readItemById = <T extends ItemDefinition>(
+  database: Database,
+  containerId: string
+) => (
   itemId: string,
   partitionKeyValue?: PartitionKey
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Promise<ItemResponse<any>> =>
+): Promise<ItemResponse<T>> =>
   database
     .container(containerId)
     .item(itemId, partitionKeyValue)
-    .read();
+    .read<T>();
+
+// const existsItemById = (database: Database, containerId: string) => (
+//   itemId: string,
+//   partitionKeyValue?: PartitionKey
+// ): Promise<boolean> =>
+//   database
+//     .container(containerId)
+//     .item(itemId, partitionKeyValue)
+//     .read()
+//     .then(res => {
+//       if (res.statusCode === 404) {
+//         return false;
+//       } else if (res.statusCode >= 200 && res.statusCode < 400) {
+//         return true;
+//       } else {
+//         throw new Error(
+//           `existsItemById for itemId = '${itemId}' and partitionKey = '${partitionKeyValue}' failed with status code = '${res.statusCode}'`
+//         );
+//       }
+//     });
 
 const readItemsByQuery = (database: Database, containerId: string) => (
   query: string | SqlQuerySpec,
@@ -30,18 +92,19 @@ const readItemsByQuery = (database: Database, containerId: string) => (
     .items.query<unknown>(query, options)
     .fetchAll();
 
-const upsert = (database: Database, containerId: string) => <
-  T extends ItemDefinition
->(
-  item: T
-): Promise<ItemResponse<ItemDefinition>> =>
+const upsert = <T extends ItemDefinition>(
+  database: Database,
+  containerId: string
+) => (item: T): Promise<ItemResponse<ItemDefinition>> =>
   database.container(containerId).items.upsert<T>(item);
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export const dao = (database: Database) => (containerId: string) => ({
+export const dao = (database: Database) => <T extends keyof IContainerItemMap>(
+  containerId: T
+) => ({
   readItemById: readItemById(database, containerId),
   readItemsByQuery: readItemsByQuery(database, containerId),
-  upsert: upsert(database, containerId)
+  upsert: upsert<IContainerItemMap[T]>(database, containerId)
 });
 
 export type Dao = ReturnType<typeof dao>;

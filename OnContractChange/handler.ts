@@ -9,7 +9,7 @@ import * as E from "fp-ts/lib/Either";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import { ReadIpaData } from "./ipa";
-import { Dao } from "./dao";
+import { Dao, IDelegate } from "./dao";
 import {
   ValidationError,
   FetchMembershipError,
@@ -20,9 +20,8 @@ import {
   SaveContractError
 } from "./error";
 
-enum TipoContrattoEnum {
-  // MANUAL = "Ins. Manuale",
-  // null,
+export enum TipoContrattoEnum {
+  MANUAL = "Ins. Manuale",
   V1_0 = "V1.0",
   V2_0 = "V2.0",
   V2_2__06_17 = "V2.2(17 giugno)",
@@ -36,20 +35,20 @@ const TipoContratto = enumType<TipoContrattoEnum>(
 );
 type TipoContratto = t.TypeOf<typeof TipoContratto>;
 
-const PecContract = t.interface({
+const PecContratto = t.interface({
   CODICEIPA: NonEmptyString,
   IDALLEGATO: NonNegativeNumber,
-  TIPOCONTRATTO: TipoContratto,
+  TIPOCONTRATTO: TipoContratto || t.null,
   id: NonEmptyString
 });
 
-type PecContract = t.TypeOf<typeof PecContract>;
+type PecContratto = t.TypeOf<typeof PecContratto>;
 
-type MembershipDecoratedPecContract = PecContract & {
+type MembershipDecoratedPecContract = PecContratto & {
   readonly adesioneAlreadyInsert: boolean;
 };
 
-type IpaDecoratedPecContract = PecContract & {
+type IpaDecoratedPecContract = PecContratto & {
   readonly isEnteCentrale: boolean;
   readonly ipaFiscalCode?: string;
 };
@@ -80,11 +79,11 @@ const PecDelegate = t.intersection([
 
 type PecDelegate = t.TypeOf<typeof PecDelegate>;
 
-type DelegatesDecoratedPecContract = PecContract & {
+type DelegatesDecoratedPecContract = PecContratto & {
   readonly delegates: ReadonlyArray<PecDelegate>;
 };
 
-const PecAttachment = t.intersection([
+const PecAllegato = t.intersection([
   t.interface({
     NOMEALLEGATO: NonEmptyString,
     PATHALLEGATO: NonEmptyString,
@@ -94,48 +93,14 @@ const PecAttachment = t.intersection([
   t.partial({ NOMEALLEGATONUOVO: NonEmptyString })
 ]);
 
-type PecAttachment = t.TypeOf<typeof PecAttachment>;
+type PecAllegato = t.TypeOf<typeof PecAllegato>;
 
 type AttachmentDecoratedPecContract = DelegatesDecoratedPecContract & {
-  readonly attachment: PecAttachment;
+  readonly attachment: PecAllegato;
 };
 
-interface IMembership {
-  readonly fiscalCode?: string;
-  readonly id: string;
-  readonly ipaCode: string;
-  readonly mainInstitution: boolean;
-  readonly status: string;
-}
-
-export interface IDelegate {
-  readonly email: string;
-  readonly firstName: string;
-  readonly fiscalCode: string;
-  readonly id: string;
-  readonly attachmentId: number;
-  readonly kind: string;
-  readonly lastName: string;
-  readonly role?: string;
-}
-
-export interface IAttachment {
-  readonly id: string;
-  readonly name: string;
-  readonly path: string;
-  readonly kind: string;
-}
-
-interface IContract {
-  readonly attachment: IAttachment;
-  readonly delegates: ReadonlyArray<IDelegate>;
-  readonly id: string;
-  readonly ipaCode: string;
-  readonly version: string;
-}
-
 const fetchMembership = (dao: Dao) => (
-  contract: PecContract
+  contract: PecContratto
 ): TE.TaskEither<unknown, MembershipDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
@@ -160,7 +125,7 @@ const fetchMembership = (dao: Dao) => (
   );
 
 const decorateFromIPA = (context: Context, readIpaData: ReadIpaData) => (
-  contract: PecContract
+  contract: PecContratto
 ): TE.TaskEither<unknown, IpaDecoratedPecContract> =>
   pipe(
     TE.tryCatch(() => readIpaData(context.bindings.ipaOpenData), E.toError),
@@ -186,11 +151,11 @@ const decorateFromIPA = (context: Context, readIpaData: ReadIpaData) => (
 
 const saveMembership = (dao: Dao) => (
   contract: IpaDecoratedPecContract
-): TE.TaskEither<unknown, PecContract> =>
+): TE.TaskEither<unknown, PecContratto> =>
   pipe(
     TE.tryCatch(
       () =>
-        dao("memberships").upsert<IMembership>({
+        dao("memberships").upsert({
           fiscalCode: contract.ipaFiscalCode,
           id: contract.CODICEIPA,
           ipaCode: contract.CODICEIPA,
@@ -213,7 +178,7 @@ const saveMembership = (dao: Dao) => (
   );
 
 const fetchPecDelegates = (dao: Dao) => (
-  contract: PecContract
+  contract: PecContratto
 ): TE.TaskEither<unknown, DelegatesDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
@@ -284,7 +249,7 @@ const fetchPecAttachment = (dao: Dao) => (
     TE.chainEitherK(
       flow(
         response => response.resource,
-        PecAttachment.decode,
+        PecAllegato.decode,
         E.mapLeft(e => new ValidationError(readableReport(e)))
       )
     ),
@@ -297,7 +262,7 @@ const saveContract = (dao: Dao) => (
   pipe(
     TE.tryCatch(
       () =>
-        dao("contracts").upsert<IContract>({
+        dao("contracts").upsert({
           attachment: {
             id: contract.attachment.id,
             kind: contract.attachment.TIPOALLEGATO,
@@ -352,25 +317,32 @@ const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
     Array.isArray(documents) ? documents : [documents],
     RA.map(
       flow(
-        PecContract.decode,
+        PecContratto.decode,
         E.mapLeft(e => new ValidationError(readableReport(e))),
         TE.fromEither,
-        TE.chain(fetchMembership(dao)),
-        TE.chain(membershipDecoratedContract =>
-          membershipDecoratedContract.adesioneAlreadyInsert
-            ? TE.right(membershipDecoratedContract)
+        TE.chain(c =>
+          !c.TIPOCONTRATTO || c.TIPOCONTRATTO === TipoContrattoEnum.MANUAL
+            ? TE.right(void 0) // TODO: add custom telemetry
             : pipe(
-                membershipDecoratedContract,
-                decorateFromIPA(context, readIpaData),
-                TE.chain(saveMembership(dao))
+                c,
+                fetchMembership(dao),
+                TE.chain(membershipDecoratedContract =>
+                  membershipDecoratedContract.adesioneAlreadyInsert
+                    ? TE.right(membershipDecoratedContract)
+                    : pipe(
+                        membershipDecoratedContract,
+                        decorateFromIPA(context, readIpaData),
+                        TE.chain(saveMembership(dao))
+                      )
+                ),
+                TE.chain(
+                  flow(
+                    fetchPecDelegates(dao),
+                    TE.chain(fetchPecAttachment(dao)),
+                    TE.chain(saveContract(dao))
+                  )
+                )
               )
-        ),
-        TE.chain(
-          flow(
-            fetchPecDelegates(dao),
-            TE.chain(fetchPecAttachment(dao)),
-            TE.chain(saveContract(dao))
-          )
         )
       )
     ),

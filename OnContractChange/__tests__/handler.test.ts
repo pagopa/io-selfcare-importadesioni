@@ -1,8 +1,8 @@
 import { FeedOptions, FeedResponse, ItemDefinition, ItemResponse, SqlQuerySpec } from "@azure/cosmos";
 import { Context } from "@azure/functions";
-import { Dao } from "../dao";
+import { Dao, IAttachment, IDelegate } from "../dao";
 import{ FetchMembershipError, FetchPecAttachmentError, FetchPecDelegatesError, FiscalCodeNotFoundError, SaveContractError, UpsertError, ValidationError } from "../error";
-import OnContractChangeHandler, { IAttachment, IDelegate } from "../handler";
+import OnContractChangeHandler, { TipoContrattoEnum } from "../handler";
 import { IpaOpenData } from "../ipa";
 
 const NO_BINDING_DATA = "placeholder for no data";
@@ -102,6 +102,25 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
       fail();
     } catch (error) {
       expect(error).toBeInstanceOf(ValidationError);
+    }
+    expect(mockDao).toBeCalledTimes(0);
+    expect(mockReadIpaData).toBeCalledTimes(0);
+  });
+
+  it.each`
+    tipoContratto
+    ${TipoContrattoEnum.MANUAL}
+    ${null}
+  `
+  ("should skip item: tipoContratto = $tipoContratto", async () => {
+    const document = {...validDocument, TIPOCONTRATTO: TipoContrattoEnum.MANUAL};
+    try {
+      await OnContractChangeHandler(mockDao, mockReadIpaData)(
+        mockContext,
+        document
+      );
+    } catch (error) {
+      fail();
     }
     expect(mockDao).toBeCalledTimes(0);
     expect(mockReadIpaData).toBeCalledTimes(0);
