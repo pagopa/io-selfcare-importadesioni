@@ -10,6 +10,19 @@ import {
   PartitionKey,
   SqlQuerySpec
 } from "@azure/cosmos";
+import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+interface ContractItem {
+  readonly attachment: NonEmptyString;
+  readonly delegates: unknown; // todo
+  readonly id: NonEmptyString;
+  readonly ipaCode: NonEmptyString;
+  readonly version: NonEmptyString;
+}
+interface CollectionMap {
+  readonly contracts: ContractItem;
+}
 
 const readItemById = (database: Database, containerId: string) => (
   itemId: string,
@@ -30,13 +43,16 @@ const readItemsByQuery = (database: Database, containerId: string) => (
     .items.query<unknown>(query, options)
     .fetchAll();
 
-const upsert = (database: Database, containerId: string) => (
-  item: unknown
-): Promise<ItemResponse<ItemDefinition>> =>
+const upsert = <C extends keyof CollectionMap>(
+  database: Database,
+  containerId: string
+) => (item: CollectionMap[C]): Promise<ItemResponse<ItemDefinition>> =>
   database.container(containerId).items.upsert(item);
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-export const dao = (database: Database) => (containerId: string) => ({
+export const dao = (database: Database) => <C extends keyof CollectionMap>(
+  containerId: C
+) => ({
   readItemById: readItemById(database, containerId),
   readItemsByQuery: readItemsByQuery(database, containerId),
   upsert: upsert(database, containerId)
