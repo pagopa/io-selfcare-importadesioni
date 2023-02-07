@@ -45,7 +45,7 @@ const readItemsByQuery = (database: Database, containerId: string) => (
 
 const upsert = <C extends keyof CollectionMap>(
   database: Database,
-  containerId: string
+  containerId: C
 ) => (item: CollectionMap[C]): Promise<ItemResponse<ItemDefinition>> =>
   database.container(containerId).items.upsert(item);
 
