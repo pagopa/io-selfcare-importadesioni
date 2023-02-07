@@ -100,6 +100,40 @@ type AttachmentDecoratedPecContract = DelegatesDecoratedPecContract & {
   readonly attachment: PecAttachment;
 };
 
+interface IMembership {
+  readonly fiscalCode?: string;
+  readonly id: string;
+  readonly ipaCode: string;
+  readonly mainInstitution: boolean;
+  readonly status: string;
+}
+
+export interface IDelegate {
+  readonly email: string;
+  readonly firstName: string;
+  readonly fiscalCode: string;
+  readonly id: string;
+  readonly attachmentId: number;
+  readonly kind: string;
+  readonly lastName: string;
+  readonly role?: string;
+}
+
+export interface IAttachment {
+  readonly id: string;
+  readonly name: string;
+  readonly path: string;
+  readonly kind: string;
+}
+
+interface IContract {
+  readonly attachment: IAttachment;
+  readonly delegates: ReadonlyArray<IDelegate>;
+  readonly id: string;
+  readonly ipaCode: string;
+  readonly version: string;
+}
+
 const fetchMembership = (dao: Dao) => (
   contract: PecContract
 ): TE.TaskEither<unknown, MembershipDecoratedPecContract> =>
@@ -116,7 +150,7 @@ const fetchMembership = (dao: Dao) => (
         statusCode =>
           new FetchMembershipError(
             `Database find relationship by id for codiceIPA = '${contract.CODICEIPA}' failed with status code = '${statusCode}'`
-          ) // FIXME: retry?
+          )
       )
     ),
     TE.map(statusCode => ({
@@ -156,8 +190,7 @@ const saveMembership = (dao: Dao) => (
   pipe(
     TE.tryCatch(
       () =>
-        // TODO: what if this ope override an already processed (status = completed) membership?
-        dao("memberships").upsert({
+        dao("memberships").upsert<IMembership>({
           fiscalCode: contract.ipaFiscalCode,
           id: contract.CODICEIPA,
           ipaCode: contract.CODICEIPA,
@@ -173,7 +206,7 @@ const saveMembership = (dao: Dao) => (
         statusCode =>
           new UpsertError(
             `Database upsert relationship for codiceIPA = '${contract.CODICEIPA}' failed with status code = '${statusCode}'`
-          ) // FIXME: retry?
+          )
       )
     ),
     TE.map(_ => contract)
@@ -190,7 +223,6 @@ const fetchPecDelegates = (dao: Dao) => (
         // eslint-disable-next-line functional/no-let
         let response;
         do {
-          // TODO: how to manager query error?
           response = await dao("pecDelegato").readItemsByQuery(
             {
               parameters: [{ name: "@idAllegato", value: contract.IDALLEGATO }],
@@ -246,7 +278,7 @@ const fetchPecAttachment = (dao: Dao) => (
         response =>
           new FetchPecAttachmentError(
             `Database find pecAllegato by id = '${contract.IDALLEGATO}' failed with status code = '${response.statusCode}'`
-          ) // FIXME: retry?
+          )
       )
     ),
     TE.chainEitherK(
@@ -265,10 +297,34 @@ const saveContract = (dao: Dao) => (
   pipe(
     TE.tryCatch(
       () =>
-        // TODO: this ope have to be idempotent in order to manage multiple execution (re-run) of the same item
-        dao("contracts").upsert({
-          attachment: contract.attachment,
-          delegates: contract.delegates,
+        dao("contracts").upsert<IContract>({
+          attachment: {
+            id: contract.attachment.id,
+            kind: contract.attachment.TIPOALLEGATO,
+            name: contract.attachment.NOMEALLEGATONUOVO
+              ? contract.attachment.NOMEALLEGATONUOVO
+              : contract.attachment.NOMEALLEGATO,
+            path: contract.attachment.PATHALLEGATO
+          },
+          delegates: contract.delegates.map(
+            (delegate): IDelegate => ({
+              attachmentId: delegate.IDALLEGATO,
+              email: delegate.EMAIL,
+              firstName: delegate.NOMINATIVO.slice(
+                0,
+                delegate.NOMINATIVO.indexOf(" ") === -1
+                  ? undefined
+                  : delegate.NOMINATIVO.indexOf(" ")
+              ).trim(),
+              fiscalCode: delegate.CODICEFISCALE,
+              id: delegate.id,
+              kind: delegate.TIPODELEGATO,
+              lastName: delegate.NOMINATIVO.slice(
+                delegate.NOMINATIVO.indexOf(" ") + 1
+              ).trim(),
+              role: delegate.QUALIFICA
+            })
+          ),
           id: contract.id,
           ipaCode: contract.CODICEIPA,
           version: contract.TIPOCONTRATTO
@@ -282,7 +338,7 @@ const saveContract = (dao: Dao) => (
         statusCode =>
           new SaveContractError(
             `Database upsert contracts for codiceIPA = '${contract.CODICEIPA}' and id = '${contract.id}' failed with status code = '${statusCode}'`
-          ) // FIXME: retry?
+          )
       )
     ),
     TE.map(_ => void 0)
@@ -293,7 +349,7 @@ const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
   documents: unknown
 ): Promise<ReadonlyArray<void>> =>
   pipe(
-    Array.isArray(documents) ? documents : [documents], // TODO: how to manage "transactionality" for each element? If no transaction is needed, it means that this handler have to be idempotent
+    Array.isArray(documents) ? documents : [documents],
     RA.map(
       flow(
         PecContract.decode,

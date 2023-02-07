@@ -30,10 +30,12 @@ const readItemsByQuery = (database: Database, containerId: string) => (
     .items.query<unknown>(query, options)
     .fetchAll();
 
-const upsert = (database: Database, containerId: string) => (
-  item: unknown
+const upsert = (database: Database, containerId: string) => <
+  T extends ItemDefinition
+>(
+  item: T
 ): Promise<ItemResponse<ItemDefinition>> =>
-  database.container(containerId).items.upsert(item);
+  database.container(containerId).items.upsert<T>(item);
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export const dao = (database: Database) => (containerId: string) => ({

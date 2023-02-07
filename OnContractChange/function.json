@@ -19,11 +19,6 @@
       "connection": "AzureWebJobsStorage",
       "direction": "in",
       "dataType": "stream"
-    },
-    {
-      "type": "http",
-      "direction": "out",
-      "name": "res"
     }
   ],
   "scriptFile": "../dist/OnContractChange/index.js"
