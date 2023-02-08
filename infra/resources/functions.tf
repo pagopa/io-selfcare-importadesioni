@@ -69,7 +69,7 @@ module "functions_app" {
     WEBSITE_VNET_ROUTE_ALL         = "1"
     WEBSITE_DNS_SERVER             = "168.63.129.16"
     FUNCTIONS_WORKER_PROCESS_COUNT = "4"
-    NODE_ENV                       = var.env_short == "p" ? "production" : "development"
+    NODE_ENV                       = "production"
 
     // Keepalive fields are all optionals
     FETCH_KEEPALIVE_ENABLED             = "true"
@@ -92,6 +92,8 @@ module "functions_app" {
     # Selfcare connection
     SELFCARE_API_URL = "" # TBD
     SELFCARE_API_KEY = "" # TBD
+
+    "AzureWebJobs.OnContractChange.Disabled" = var.env_short == "p" ? "1" : "0" # only enable prod for now
   }
 
   internal_storage = {
