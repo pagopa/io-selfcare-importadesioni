@@ -96,10 +96,6 @@ module "functions_app" {
     "AzureWebJobs.OnContractChange.Disabled" = var.env_short == "p" ? "1" : "0" # only enable prod for now
   }
 
-  internal_storage = {
-    "enable" = false
-  }
-
   subnet_id = module.app_snet.id
 
   allowed_subnets = [module.app_snet.id]
