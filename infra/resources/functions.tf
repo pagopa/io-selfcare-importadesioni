@@ -69,7 +69,7 @@ module "functions_app" {
     WEBSITE_VNET_ROUTE_ALL         = "1"
     WEBSITE_DNS_SERVER             = "168.63.129.16"
     FUNCTIONS_WORKER_PROCESS_COUNT = "4"
-    NODE_ENV                       = "production"
+    NODE_ENV                       = var.env_short == "p" ? "production" : "development"
 
     // Keepalive fields are all optionals
     FETCH_KEEPALIVE_ENABLED             = "true"
