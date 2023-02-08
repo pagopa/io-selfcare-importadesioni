@@ -1,11 +1,11 @@
-import { cosmosdb } from "../utils/cosmosdb";
-import { readIpaData } from "./ipa";
-import { dao } from "./dao";
-import OnContractChangeHandler from "./handler";
+import { Context } from "@azure/functions";
 
-const handleContractChange = OnContractChangeHandler(
-  dao(cosmosdb),
-  readIpaData
-);
+const handleContractChange = async (
+  context: Context,
+  documents: unknown
+): Promise<unknown> => {
+  context.log.info(`handleContractChange`, documents);
+  return documents;
+};
 
 export default handleContractChange;
