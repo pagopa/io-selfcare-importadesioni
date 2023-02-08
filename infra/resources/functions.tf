@@ -80,9 +80,14 @@ module "functions_app" {
     FETCH_KEEPALIVE_TIMEOUT             = "60000"
 
     # Source data
-    COSMOSDB_NAME = azurerm_cosmosdb_sql_database.db_importadesioni.name
-    COSMOSDB_URI  = module.cosmosdb_account.endpoint
-    COSMOSDB_KEY  = module.cosmosdb_account.primary_key
+    COSMOSDB_CONNECTIONSTRING               = format("AccountEndpoint=%s;AccountKey=%s;", module.cosmosdb_account.endpoint, module.cosmosdb_account.primary_key),
+    COSMOSDB_NAME                           = azurerm_cosmosdb_sql_database.db_importadesioni.name
+    COSMOSDB_URI                            = module.cosmosdb_account.endpoint
+    COSMOSDB_KEY                            = module.cosmosdb_account.primary_key
+    COSMOSDB_PEC_CONTRACTS_COLLECTION       = "pecContratto"
+    COSMOSDB_PEC_CONTRACTS_LEASE_COLLECTION = "pecContrattoLeases"
+    IPA_OPEN_DATA_STORAGE_PATH              = "ipa/ipa-open-data.csv"
+    AzureWebJobsStorage                     = module.storage_account.primary_connection_string
 
     # Selfcare connection
     SELFCARE_API_URL = "" # TBD
@@ -90,8 +95,8 @@ module "functions_app" {
   }
 
   internal_storage = {
-    "enable"                     = false# true,
-    "private_endpoint_subnet_id" = "" # module.app_snet.id,
+    "enable"                     = false # true,
+    "private_endpoint_subnet_id" = ""    # module.app_snet.id,
     "queues"                     = ["process-adesione", "process-adesione-poison"],
     "private_dns_zone_blob_ids"  = [],
     "private_dns_zone_queue_ids" = [],
