@@ -3190,6 +3190,11 @@ cssstyle@^1.0.0:
   dependencies:
     cssom "0.3.x"
 
+csv-parse@^5.3.3:
+  version "5.3.3"
+  resolved "https://registry.yarnpkg.com/csv-parse/-/csv-parse-5.3.3.tgz#3b75d2279e2edb550cbc54c65b25cbbf3d0033ad"
+  integrity sha512-kEWkAPleNEdhFNkHQpFHu9RYPogsFj3dx6bCxL847fsiLgidzWg0z/O0B1kVWMJUc5ky64zGp18LX2T3DQrOfw==
+
 danger-plugin-yarn@^1.2.1:
   version "1.6.0"
   resolved "https://registry.yarnpkg.com/danger-plugin-yarn/-/danger-plugin-yarn-1.6.0.tgz#9ca1336cfe8017867d97a7ed410ab82c8397f04d"
