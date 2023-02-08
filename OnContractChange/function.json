@@ -16,7 +16,7 @@
       "name": "ipaOpenData",
       "type": "blob",
       "path": "%IPA_OPEN_DATA_STORAGE_PATH%",
-      "connection": "AzureWebJobsStorage",
+      "connection": "INTERNAL_STORAGE_CONNECTION_STRING",
       "direction": "in",
       "dataType": "stream"
     }
