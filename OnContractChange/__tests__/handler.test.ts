@@ -154,7 +154,8 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     const document = {...validDocument};
     const mockReadItemByIdResult = {statusCode: 404} as ItemResponse<any>;
     mockReadItemById.mockResolvedValueOnce(mockReadItemByIdResult);
-    mockReadIpaData.mockResolvedValueOnce(new Map([[document.CODICEIPA, undefined]]));
+    // force to return an undefined fiscal code to test robustness
+    mockReadIpaData.mockResolvedValueOnce(new Map([[document.CODICEIPA, undefined as any]]));
     try {
       await OnContractChangeHandler(mockDao, mockReadIpaData)(
         mockContext,
