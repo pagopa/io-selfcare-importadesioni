@@ -1,8 +1,7 @@
 /**
  * Utility functions to read data from IPA Open Data (CSV formatted).
  */
-import { pipeline } from "stream/promises";
-import { Transform } from "stream";
+import { Transform, promises } from "stream";
 import { parse } from "csv-parse";
 
 export type IpaCode = string;
@@ -22,7 +21,7 @@ export const readIpaData = async (
   stream: NodeJS.ReadableStream
 ): Promise<IpaOpenData> => {
   const ipaCode2FiscalCode = new Map<string, string>();
-  await pipeline(
+  await promises.pipeline(
     stream,
     parse({ delimiter: ",", from_line: 2 }),
     new Transform({
