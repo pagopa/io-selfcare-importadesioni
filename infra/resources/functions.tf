@@ -95,14 +95,7 @@ module "functions_app" {
   }
 
   internal_storage = {
-    "enable"                     = false # true,
-    "private_endpoint_subnet_id" = ""    # module.app_snet.id,
-    "queues"                     = ["process-adesione", "process-adesione-poison"],
-    "private_dns_zone_blob_ids"  = [],
-    "private_dns_zone_queue_ids" = [],
-    "private_dns_zone_table_ids" = [],
-    "containers"                 = [],
-    "blobs_retention_days"       = 0,
+    "enable" = false
   }
 
   subnet_id = module.app_snet.id
