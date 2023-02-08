@@ -50,20 +50,20 @@ resource "azurerm_cosmosdb_sql_database" "db_importadesioni" {
 locals {
   database_containers = [
     {
-      name               = "Contratto"
-      partition_key_path = "/ID"
+      name               = "pecContratto"
+      partition_key_path = "/id"
     },
     {
-      name               = "Allegato"
-      partition_key_path = "/ID"
+      name               = "pecAllegato"
+      partition_key_path = "/id"
     },
     {
-      name               = "Delegato"
-      partition_key_path = "/ID"
+      name               = "pecDelegato"
+      partition_key_path = "/id"
     },
     {
-      name               = "SoggettoAggregato"
-      partition_key_path = "/ID"
+      name               = "pecSoggettoAggregato"
+      partition_key_path = "/id"
     },
     {
       name               = "memberships"
