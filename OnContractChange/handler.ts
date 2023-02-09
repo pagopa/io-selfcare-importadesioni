@@ -36,7 +36,7 @@ const TipoContratto = enumType<TipoContrattoEnum>(
 type TipoContratto = t.TypeOf<typeof TipoContratto>;
 
 const PecContratto = t.interface({
-  CODICEIPA: NonEmptyString,
+  CODICEIPA: t.string,
   IDALLEGATO: NonNegativeNumber,
   TIPOCONTRATTO: TipoContratto || t.null,
   id: NonEmptyString
@@ -318,13 +318,25 @@ const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
     RA.map(
       flow(
         PecContratto.decode,
-        E.mapLeft(e => new ValidationError(readableReport(e))),
+        E.mapLeft(errors => new ValidationError(readableReport(errors))),
         TE.fromEither,
-        TE.chain(c =>
-          !c.TIPOCONTRATTO || c.TIPOCONTRATTO === TipoContrattoEnum.MANUAL
-            ? TE.right(void 0) // TODO: add custom telemetry
-            : pipe(
-                c,
+        TE.chain(pecContract => {
+          if (
+            !pecContract.TIPOCONTRATTO ||
+            pecContract.TIPOCONTRATTO === TipoContrattoEnum.MANUAL
+          ) {
+            // TODO: add custom telemetry?
+            context.log.info(
+              `TIPOCONTRATTO '${pecContract.TIPOCONTRATTO}' not allowed. Skip item!`
+            );
+            return TE.right(void 0);
+          } else {
+            if (pecContract.CODICEIPA) {
+              return pipe(
+                {
+                  ...pecContract,
+                  CODICEIPA: pecContract.CODICEIPA.toLowerCase()
+                },
                 fetchMembership(dao),
                 TE.chain(membershipDecoratedContract =>
                   membershipDecoratedContract.adesioneAlreadyInsert
@@ -342,8 +354,12 @@ const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
                     TE.chain(saveContract(dao))
                   )
                 )
-              )
-        )
+              );
+            } else {
+              return TE.left(new Error("IPACODE cannot be null"));
+            }
+          }
+        })
       )
     ),
     RA.sequence(TE.ApplicativePar),
