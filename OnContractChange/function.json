@@ -18,7 +18,7 @@
       "path": "ipa/ipa-open-data.csv",
       "connection": "INTERNAL_STORAGE_CONNECTION_STRING",
       "direction": "in",
-      "dataType": "string"
+      "dataType": "stream"
     }
   ],
   "scriptFile": "../dist/OnContractChange/index.js"
