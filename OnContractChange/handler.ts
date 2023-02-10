@@ -21,6 +21,8 @@ import {
   SaveContractError
 } from "./error";
 
+const NotAllowedTipoContratto = t.union([t.literal("Ins. Manuale"), t.null]);
+
 export enum TipoContrattoEnum {
   V1_0 = "V1.0",
   V2_0 = "V2.0",
@@ -366,10 +368,7 @@ const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
     Array.isArray(documents) ? documents : [documents],
     RA.map(
       flow(
-        O.fromPredicate(
-          document =>
-            document.TIPOCONTRATTO && document.TIPOCONTRATTO !== "Ins. Manuale"
-        ),
+        O.fromPredicate(document => TipoContratto.is(document.TIPOCONTRATTO)),
         O.fold(
           () => {
             // TODO: add custom telemetry?

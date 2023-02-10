@@ -99,7 +99,7 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
   });
 
   it("should fails document validation", async () => {
-    const document = {...validDocument, TIPOCONTRATTO: "TIPOCONTRATTO"};
+    const document = {...validDocument, CODICEIPA: undefined};
     try {
       await OnContractChangeHandler(mockDao, mockReadIpaData)(
         mockContext,
@@ -117,6 +117,7 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     tipoContratto
     ${"Ins. Manuale"}
     ${null}
+    ${undefined}
   `
   ("should skip item: tipoContratto = $tipoContratto", async ({tipoContratto}) => {
     const document = {...validDocument, TIPOCONTRATTO: tipoContratto};
