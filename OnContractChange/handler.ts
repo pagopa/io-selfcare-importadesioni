@@ -6,6 +6,7 @@ import { flow, pipe } from "fp-ts/lib/function";
 import { enumType } from "@pagopa/ts-commons/lib/types";
 import * as TE from "fp-ts/lib/TaskEither";
 import * as E from "fp-ts/lib/Either";
+import * as O from "fp-ts/lib/Option";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import { ReadIpaData } from "./ipa";
@@ -21,7 +22,6 @@ import {
 } from "./error";
 
 export enum TipoContrattoEnum {
-  MANUAL = "Ins. Manuale",
   V1_0 = "V1.0",
   V2_0 = "V2.0",
   V2_2__06_17 = "V2.2(17 giugno)",
@@ -38,7 +38,7 @@ type TipoContratto = t.TypeOf<typeof TipoContratto>;
 const PecContratto = t.interface({
   CODICEIPA: t.string,
   IDALLEGATO: NonNegativeNumber,
-  TIPOCONTRATTO: TipoContratto || t.null,
+  TIPOCONTRATTO: TipoContratto,
   id: NonEmptyString
 });
 
@@ -366,22 +366,22 @@ const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
     Array.isArray(documents) ? documents : [documents],
     RA.map(
       flow(
-        PecContratto.decode,
-        E.mapLeft(errors => new ValidationError(readableReport(errors))),
-        TE.fromEither,
-        TE.chain(pecContract => {
-          if (
-            !pecContract.TIPOCONTRATTO ||
-            pecContract.TIPOCONTRATTO === TipoContrattoEnum.MANUAL
-          ) {
+        O.fromPredicate(
+          document =>
+            document.TIPOCONTRATTO && document.TIPOCONTRATTO !== "Ins. Manuale"
+        ),
+        O.fold(
+          () => {
             // TODO: add custom telemetry?
-            context.log.info(
-              `TIPOCONTRATTO '${pecContract.TIPOCONTRATTO}' not allowed. Skip item!`
-            );
+            context.log.info(`TIPOCONTRATTO not allowed. Skip item!`);
             return TE.right(void 0);
-          } else {
-            if (pecContract.CODICEIPA) {
-              return pipe(
+          },
+          flow(
+            PecContratto.decode,
+            E.mapLeft(errors => new ValidationError(readableReport(errors))),
+            TE.fromEither,
+            TE.chain(pecContract =>
+              pipe(
                 {
                   ...pecContract,
                   CODICEIPA: pecContract.CODICEIPA.toLowerCase()
@@ -403,12 +403,10 @@ const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
                     TE.chain(saveContract(context, dao))
                   )
                 )
-              );
-            } else {
-              return TE.left(new Error("IPACODE cannot be null"));
-            }
-          }
-        })
+              )
+            )
+          )
+        )
       )
     ),
     RA.sequence(TE.ApplicativePar),

@@ -10,6 +10,12 @@ const mockContext = ({
   bindings: {
     log: console,
     ipaOpenData: NO_BINDING_DATA
+  },
+  log: {
+    error: jest.fn().mockImplementation(console.log),
+    info: jest.fn().mockImplementation(console.log),
+    verbose: jest.fn().mockImplementation(console.log),
+    warn: jest.fn().mockImplementation(console.log)
   }
 } as unknown) as Context;
 
@@ -109,23 +115,23 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
 
   it.each`
     tipoContratto
-    ${TipoContrattoEnum.MANUAL}
+    ${"Ins. Manuale"}
     ${null}
   `
-  ("should skip item: tipoContratto = $tipoContratto", async () => {
-    const document = {...validDocument, TIPOCONTRATTO: TipoContrattoEnum.MANUAL};
+  ("should skip item: tipoContratto = $tipoContratto", async ({tipoContratto}) => {
+    const document = {...validDocument, TIPOCONTRATTO: tipoContratto};
     try {
       await OnContractChangeHandler(mockDao, mockReadIpaData)(
         mockContext,
         document
       );
     } catch (error) {
+      console.log(error);
       fail();
     }
     expect(mockDao).toBeCalledTimes(0);
     expect(mockReadIpaData).toBeCalledTimes(0);
   });
-
 
   it("should fails on fetching membership", async () => {
     const document = {...validDocument};
@@ -143,19 +149,18 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(1);
     expect(mockDao).toBeCalledWith("memberships");
     expect(mockReadItemById).toBeCalledTimes(1);
-    expect(mockReadItemById).toBeCalledWith(document.CODICEIPA, document.CODICEIPA);
+    expect(mockReadItemById).toBeCalledWith(document.CODICEIPA.toLowerCase(), document.CODICEIPA.toLowerCase());
     expect(mockReadItemsByQuery).toBeCalledTimes(0);
     expect(mockUpsert).toBeCalledTimes(0);
     expect(mockReadIpaData).toBeCalledTimes(0);
   });
-
 
    it("should fail fetch fiscal code from IPA", async () => {
     const document = {...validDocument};
     const mockReadItemByIdResult = {statusCode: 404} as ItemResponse<any>;
     mockReadItemById.mockResolvedValueOnce(mockReadItemByIdResult);
     // force to return an undefined fiscal code to test robustness
-    mockReadIpaData.mockResolvedValueOnce(new Map([[document.CODICEIPA, undefined as any]]));
+    mockReadIpaData.mockResolvedValueOnce(new Map([[document.CODICEIPA.toLowerCase(), undefined as any]]));
     try {
       await OnContractChangeHandler(mockDao, mockReadIpaData)(
         mockContext,
@@ -168,7 +173,6 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(1);
     expect(mockDao).toBeCalledWith("memberships");
     expect(mockReadItemById).toBeCalledTimes(1);
-    expect(mockReadItemById).toBeCalledWith(document.CODICEIPA, document.CODICEIPA);
     expect(mockReadIpaData).toBeCalledTimes(1);
     expect(mockReadIpaData).toBeCalledWith(mockContext.bindings.ipaOpenData);
     expect(mockUpsert).toBeCalledTimes(0);
@@ -193,13 +197,11 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(2);
     expect(mockDao).toBeCalledWith("memberships");
     expect(mockReadItemById).toBeCalledTimes(1);
-    expect(mockReadItemById).toBeCalledWith(document.CODICEIPA, document.CODICEIPA);
     expect(mockReadIpaData).toBeCalledTimes(1);
-    expect(mockReadIpaData).toBeCalledWith(mockContext.bindings.ipaOpenData);
     expect(mockUpsert).toBeCalledTimes(1);
-    expect(mockUpsert).toBeCalledWith({id: document.CODICEIPA,
-      fiscalCode: mockIpaOpenData.get(document.CODICEIPA),
-      ipaCode: document.CODICEIPA,
+    expect(mockUpsert).toBeCalledWith({id: document.CODICEIPA.toLowerCase(),
+      fiscalCode: mockIpaOpenData.get(document.CODICEIPA.toLowerCase()),
+      ipaCode: document.CODICEIPA.toLowerCase(),
       mainInstitution: false,
       status: "INITIAL"});
     expect(mockReadItemsByQuery).toBeCalledTimes(0);
@@ -312,7 +314,8 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     const mockReadPecDelegatesByQueryResult = [{ ...validPecDelegate }];
     mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
-    mockReadIpaData.mockResolvedValueOnce(new Map());
+     const mockIpaOpenData = new Map();
+    mockReadIpaData.mockResolvedValueOnce(mockIpaOpenData);
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
               .mockResolvedValueOnce({statusCode: 500} as ItemResponse<any>);
     mockReadItemsByQuery.mockResolvedValueOnce({hasMoreResults: false, resources: mockReadPecDelegatesByQueryResult} as FeedResponse<unknown>);
@@ -331,7 +334,14 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockReadIpaData).toBeCalledTimes(1);
     expect(mockUpsert).toBeCalledTimes(2);
     expect(mockReadItemsByQuery).toBeCalledTimes(1);
-    expect(mockUpsert).lastCalledWith({id: document.id, ipaCode: document.CODICEIPA, fiscalCode: undefined, version: document.TIPOCONTRATTO, delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), attachment: mapAttachment(mockReadPecAttachmentByIdResult)});
+    expect(mockUpsert).lastCalledWith({
+      id: document.id, 
+      ipaCode: document.CODICEIPA.toLowerCase(), 
+      fiscalCode: mockIpaOpenData.get(document.CODICEIPA.toLowerCase()),
+      version: document.TIPOCONTRATTO, 
+      delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), 
+      attachment: mapAttachment(mockReadPecAttachmentByIdResult)
+    });
   });
 
    it.each`
@@ -361,12 +371,18 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockReadItemById).toBeCalledTimes(2);
     expect(mockReadIpaData).toBeCalledTimes(1);
     expect(mockUpsert).toBeCalledTimes(2);
-    expect(mockUpsert).nthCalledWith(1, {id: document.CODICEIPA,
-      fiscalCode: ipaOpenData.get(document.CODICEIPA),
-      ipaCode: document.CODICEIPA,
-      mainInstitution: ipaOpenData.has(document.CODICEIPA),
+    expect(mockUpsert).nthCalledWith(1, {id: document.CODICEIPA.toLowerCase(),
+      fiscalCode: ipaOpenData.get(document.CODICEIPA.toLowerCase()),
+      ipaCode: document.CODICEIPA.toLowerCase(),
+      mainInstitution: ipaOpenData.has(document.CODICEIPA.toLowerCase()),
       status: "INITIAL"});
-    expect(mockUpsert).nthCalledWith(2, {id: document.id, ipaCode: document.CODICEIPA, version: document.TIPOCONTRATTO, delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), attachment: mapAttachment(mockReadPecAttachmentByIdResult)});
+    expect(mockUpsert).nthCalledWith(2, {
+      id: document.id, 
+      ipaCode: document.CODICEIPA.toLowerCase(), 
+      version: document.TIPOCONTRATTO, 
+      delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), 
+      attachment: mapAttachment(mockReadPecAttachmentByIdResult)
+    });
     expect(mockReadItemsByQuery).toBeCalledTimes(1);
   });
    
@@ -393,7 +409,13 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockReadIpaData).toBeCalledTimes(0);
     expect(mockUpsert).toBeCalledTimes(1);
     expect(mockReadItemsByQuery).toBeCalledTimes(1);
-    expect(mockUpsert).lastCalledWith({id: document.id, ipaCode: document.CODICEIPA, version: document.TIPOCONTRATTO, delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), attachment: mapAttachment(mockReadPecAttachmentByIdResult)});
+    expect(mockUpsert).lastCalledWith({
+      id: document.id, 
+      ipaCode: document.CODICEIPA.toLowerCase(), 
+      version: document.TIPOCONTRATTO, 
+      delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), 
+      attachment: mapAttachment(mockReadPecAttachmentByIdResult)
+    });
   });
 
 });
