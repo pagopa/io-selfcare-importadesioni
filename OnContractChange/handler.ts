@@ -21,8 +21,6 @@ import {
   SaveContractError
 } from "./error";
 
-const NotAllowedTipoContratto = t.union([t.literal("Ins. Manuale"), t.null]);
-
 export enum TipoContrattoEnum {
   V1_0 = "V1.0",
   V2_0 = "V2.0",
@@ -144,7 +142,9 @@ const decorateFromIPA = (context: Context, readIpaData: ReadIpaData) => (
           e
         )}`;
         context.log.error(errorMessage);
-        context.log.error(typeof context.bindings.ipaOpenData);
+        context.log.info(Object.keys(context.bindings));
+        context.log.info(context.bindings);
+        context.log.info(typeof context.bindings.ipaOpenData);
         return new Error(errorMessage);
       }
     ),
