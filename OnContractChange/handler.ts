@@ -144,6 +144,7 @@ const decorateFromIPA = (context: Context, readIpaData: ReadIpaData) => (
           e
         )}`;
         context.log.error(errorMessage);
+        context.log.error(typeof context.bindings.ipaOpenData);
         return new Error(errorMessage);
       }
     ),
