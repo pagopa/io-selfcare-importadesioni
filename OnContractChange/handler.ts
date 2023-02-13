@@ -6,10 +6,9 @@ import { flow, pipe } from "fp-ts/lib/function";
 import { enumType } from "@pagopa/ts-commons/lib/types";
 import * as TE from "fp-ts/lib/TaskEither";
 import * as E from "fp-ts/lib/Either";
-import * as O from "fp-ts/lib/Option";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
-import { ReadIpaData } from "./ipa";
+import { IpaOpenData, ReadIpaData } from "./ipa";
 import { Dao, IDelegate } from "./dao";
 import {
   ValidationError,
@@ -131,28 +130,16 @@ const fetchMembership = (context: Context, dao: Dao) => (
     }))
   );
 
-const decorateFromIPA = (context: Context, readIpaData: ReadIpaData) => (
+const decorateFromIPA = (context: Context, ipaOpenData: IpaOpenData) => (
   contract: PecContratto
 ): TE.TaskEither<unknown, IpaDecoratedPecContract> =>
   pipe(
-    TE.tryCatch(
-      () => readIpaData(context.bindings.ipaOpenData),
-      e => {
-        const errorMessage = `Failed to read IPA Open Data, Reason ${String(
-          e
-        )}`;
-        context.log.error(errorMessage);
-        context.log.info(Object.keys(context.bindings));
-        context.log.info(context.bindings);
-        context.log.info(typeof context.bindings.ipaOpenData);
-        return new Error(errorMessage);
-      }
-    ),
-    TE.map(ipaOpenData => ({
+    {
       ...contract,
       ipaFiscalCode: ipaOpenData.get(contract.CODICEIPA),
       isEnteCentrale: ipaOpenData.has(contract.CODICEIPA)
-    })),
+    },
+    TE.right,
     TE.chainEitherK(
       E.fromPredicate(
         ipaDecoratedContract =>
@@ -361,55 +348,57 @@ const saveContract = (context: Context, dao: Dao) => (
     TE.map(_ => void 0)
   );
 
+const HandleSingleDocument = (
+  context: Context,
+  dao: Dao,
+  ipaOpenData: IpaOpenData
+  // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+) => (document: unknown) =>
+  pipe(
+    document,
+    PecContratto.decode,
+    E.mapLeft(errors => new ValidationError(readableReport(errors))),
+    TE.fromEither,
+    TE.chain(pecContract =>
+      pipe(
+        {
+          ...pecContract,
+          CODICEIPA: pecContract.CODICEIPA.toLowerCase()
+        },
+        fetchMembership(context, dao),
+        TE.chain(membershipDecoratedContract =>
+          membershipDecoratedContract.adesioneAlreadyInsert
+            ? TE.right(membershipDecoratedContract)
+            : pipe(
+                membershipDecoratedContract,
+                decorateFromIPA(context, ipaOpenData),
+                TE.chain(saveMembership(context, dao))
+              )
+        ),
+        TE.chain(
+          flow(
+            fetchPecDelegates(context, dao),
+            TE.chain(fetchPecAttachment(context, dao)),
+            TE.chain(saveContract(context, dao))
+          )
+        )
+      )
+    )
+  );
+
 const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
   context: Context,
   documents: unknown
 ): Promise<ReadonlyArray<void>> =>
   pipe(
-    Array.isArray(documents) ? documents : [documents],
-    RA.map(
-      flow(
-        O.fromPredicate(document => TipoContratto.is(document.TIPOCONTRATTO)),
-        O.fold(
-          () => {
-            // TODO: add custom telemetry?
-            context.log.info(`TIPOCONTRATTO not allowed. Skip item!`);
-            return TE.right(void 0);
-          },
-          flow(
-            PecContratto.decode,
-            E.mapLeft(errors => new ValidationError(readableReport(errors))),
-            TE.fromEither,
-            TE.chain(pecContract =>
-              pipe(
-                {
-                  ...pecContract,
-                  CODICEIPA: pecContract.CODICEIPA.toLowerCase()
-                },
-                fetchMembership(context, dao),
-                TE.chain(membershipDecoratedContract =>
-                  membershipDecoratedContract.adesioneAlreadyInsert
-                    ? TE.right(membershipDecoratedContract)
-                    : pipe(
-                        membershipDecoratedContract,
-                        decorateFromIPA(context, readIpaData),
-                        TE.chain(saveMembership(context, dao))
-                      )
-                ),
-                TE.chain(
-                  flow(
-                    fetchPecDelegates(context, dao),
-                    TE.chain(fetchPecAttachment(context, dao)),
-                    TE.chain(saveContract(context, dao))
-                  )
-                )
-              )
-            )
-          )
-        )
+    readIpaData,
+    TE.chain(ipaOpenData =>
+      pipe(
+        Array.isArray(documents) ? documents : [documents],
+        RA.map(HandleSingleDocument(context, dao, ipaOpenData)),
+        RA.sequence(TE.ApplicativePar)
       )
     ),
-    RA.sequence(TE.ApplicativePar),
     TE.getOrElse(err => {
       throw err instanceof Error ? err : new Error(`${err}`);
     })

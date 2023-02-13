@@ -8,17 +8,9 @@
       "connectionStringSetting": "COSMOSDB_CONNECTIONSTRING",
       "databaseName": "%COSMOSDB_NAME%",
       "collectionName": "%COSMOSDB_PEC_CONTRACTS_COLLECTION%",
-      "leaseCollectionName": "%COSMOSDB_PEC_CONTRACTS_LEASE_COLLECTION%",
+      "leaseCollectionName": "%COSMOSDB_PEC_CONTRACTS_LEASE_COLLECTION%2",
       "createLeaseCollectionIfNotExists": true,
       "startFromBeginning": true
-    },
-    {
-      "name": "ipaOpenData",
-      "type": "blob",
-      "path": "ipa/ipa-open-data.csv",
-      "connection": "INTERNAL_STORAGE_CONNECTION_STRING",
-      "direction": "in",
-      "dataType": "stream"
     }
   ],
   "scriptFile": "../dist/OnContractChange/index.js"
