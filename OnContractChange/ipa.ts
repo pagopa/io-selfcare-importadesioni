@@ -56,7 +56,7 @@ export const createIpaDataReader = (
   ...[blobService, containerName, blobName, options]: Parameters<
     typeof getBlobAsText
   >
-): ReadIpaData =>
+): IpaDataReader =>
   pipe(
     TE.tryCatch(
       () => getBlobAsText(blobService, containerName, blobName, options),
@@ -86,4 +86,4 @@ export const createIpaDataReader = (
     )
   );
 
-export type ReadIpaData = TE.TaskEither<Error, IpaOpenData>;
+export type IpaDataReader = TE.TaskEither<Error, IpaOpenData>;

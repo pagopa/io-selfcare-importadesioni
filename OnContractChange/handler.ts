@@ -8,7 +8,7 @@ import * as TE from "fp-ts/lib/TaskEither";
 import * as E from "fp-ts/lib/Either";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
-import { IpaOpenData, ReadIpaData } from "./ipa";
+import { IpaOpenData, IpaDataReader } from "./ipa";
 import { Dao, IDelegate } from "./dao";
 import {
   ValidationError,
@@ -386,7 +386,10 @@ const HandleSingleDocument = (
     )
   );
 
-const OnContractChangeHandler = (dao: Dao, readIpaData: ReadIpaData) => async (
+const OnContractChangeHandler = (
+  dao: Dao,
+  readIpaData: IpaDataReader
+) => async (
   context: Context,
   documents: unknown
 ): Promise<ReadonlyArray<void>> =>
