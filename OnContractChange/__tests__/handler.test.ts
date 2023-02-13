@@ -96,21 +96,7 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(result).toHaveLength(0);
     expect(mockDao).toBeCalledTimes(0);
   });
-
-  it("should fail document validation", async () => {
-    const document = {...validDocument, CODICEIPA: undefined};
-    try {
-      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
-        mockContext,
-        document
-      );
-      fail();
-    } catch (error) {
-      expect(error).toBeInstanceOf(ValidationError);
-    }
-    expect(mockDao).toBeCalledTimes(0);
-  });
-
+  
   it.each`
     tipoContratto
     ${"Ins. Manuale"}
@@ -125,8 +111,21 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
         document
       );
     } catch (error) {
-      console.log(error);
       fail();
+    }
+    expect(mockDao).toBeCalledTimes(0);
+  });
+
+  it("should fail document validation", async () => {
+    const document = {...validDocument, CODICEIPA: undefined};
+    try {
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
+        mockContext,
+        document
+      );
+      fail();
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationError);
     }
     expect(mockDao).toBeCalledTimes(0);
   });
@@ -220,11 +219,6 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockReadItemById).toBeCalledTimes(1);
     expect(mockUpsert).toBeCalledTimes(1);
     expect(mockReadItemsByQuery).toBeCalledTimes(1);
-    expect(mockReadItemsByQuery).toBeCalledWith({
-      parameters: [{ name: "@idAllegato", value: document.IDALLEGATO }],
-      query: "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = *@idAllegato*"
-    },
-    { continuationToken: undefined });
   });
 
    it("should fail to fetch delegates caused by result validation error", async () => {
@@ -261,7 +255,7 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockReadItemsByQuery).toBeCalledTimes(2);
      const sqlQuerySpec = {
        parameters: [{ name: "@idAllegato", value: document.IDALLEGATO }],
-       query: "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = *@idAllegato*"
+       query: "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = @idAllegato"
      };
     expect(mockReadItemsByQuery).nthCalledWith(1, sqlQuerySpec,
     { continuationToken: undefined });

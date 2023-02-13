@@ -206,7 +206,7 @@ const fetchPecDelegates = (context: Context, dao: Dao) => (
             {
               parameters: [{ name: "@idAllegato", value: contract.IDALLEGATO }],
               query:
-                "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = *@idAllegato*"
+                "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = @idAllegato"
             },
             {
               continuationToken: response
@@ -398,6 +398,18 @@ const OnContractChangeHandler = (
     TE.chain(ipaOpenData =>
       pipe(
         Array.isArray(documents) ? documents : [documents],
+        RA.filter(document =>
+          pipe(
+            document.TIPOCONTRATTO,
+            TipoContratto.decode,
+            E.mapLeft(_ =>
+              context.log.info(
+                `TIPOCONTRATTO = '${document.TIPOCONTRATTO}' not allowed. Skip item!`
+              )
+            ),
+            E.isRight
+          )
+        ),
         RA.map(HandleSingleDocument(context, dao, ipaOpenData)),
         RA.sequence(TE.ApplicativePar)
       )
