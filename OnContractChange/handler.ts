@@ -383,8 +383,9 @@ const HandleSingleDocument = (
       pipe(
         {
           ...pecContract,
-          CODICEIPA: pecContract.CODICEIPA.toLowerCase()
+          CODICEIPA: pecContract.CODICEIPA.toLowerCase() as NonEmptyString
         },
+        x => x,
         fetchMembership(context, dao),
         TE.chain(membershipDecoratedContract =>
           membershipDecoratedContract.adesioneAlreadyInsert
