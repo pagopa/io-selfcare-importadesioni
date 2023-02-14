@@ -35,7 +35,7 @@ const TipoContratto = enumType<TipoContrattoEnum>(
 type TipoContratto = t.TypeOf<typeof TipoContratto>;
 
 const PecContratto = t.interface({
-  CODICEIPA: t.string,
+  CODICEIPA: NonEmptyString,
   IDALLEGATO: NonNegativeNumber,
   TIPOCONTRATTO: TipoContratto,
   id: NonEmptyString
@@ -98,6 +98,14 @@ type AttachmentDecoratedPecContract = DelegatesDecoratedPecContract & {
   readonly attachment: PecAllegato;
 };
 
+const logMessage = (
+  log: (...args: ReadonlyArray<unknown>) => void,
+  errorMessage: string
+): string => {
+  log(errorMessage);
+  return errorMessage;
+};
+
 const fetchMembership = (context: Context, dao: Dao) => (
   contract: PecContratto
 ): TE.TaskEither<unknown, MembershipDecoratedPecContract> =>
@@ -105,23 +113,25 @@ const fetchMembership = (context: Context, dao: Dao) => (
     TE.tryCatch(
       () =>
         dao("memberships").readItemById(contract.CODICEIPA, contract.CODICEIPA),
-      e => {
-        const errorMessage = `Database find relationship by id for codiceIPA = '${
-          contract.CODICEIPA
-        }' failed. Reason: ${String(e)}`;
-        context.log.error(errorMessage);
-        return new FetchMembershipError(errorMessage);
-      }
+      flow(
+        error =>
+          `Database find relationship by id for codiceIPA = '${
+            contract.CODICEIPA
+          }' failed. Reason: ${String(error)}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        errorMessage => new FetchMembershipError(errorMessage)
+      )
     ),
     TE.map(response => response.statusCode),
     TE.chainEitherK(
       E.fromPredicate(
         statusCode => statusCode === 200 || statusCode === 404,
-        statusCode => {
-          const errorMessage = `Database find relationship by id for codiceIPA = '${contract.CODICEIPA}' failed. Reason: status code = '${statusCode}'`;
-          context.log.error(errorMessage);
-          return new FetchMembershipError(errorMessage);
-        }
+        flow(
+          statusCode =>
+            `Database find relationship by id for codiceIPA = '${contract.CODICEIPA}' failed. Reason: status code = '${statusCode}'`,
+          errorMessage => logMessage(context.log.error, errorMessage),
+          errorMessage => new FetchMembershipError(errorMessage)
+        )
       )
     ),
     TE.map(statusCode => ({
@@ -147,11 +157,12 @@ const decorateFromIPA = (context: Context, ipaOpenData: IpaOpenData) => (
             ipaDecoratedContract.isEnteCentrale &&
             !ipaDecoratedContract.ipaFiscalCode
           ),
-        ipaDecoratedContract => {
-          const errorMessage = `Fiscal Code not found in IPA Open Data for IPA code '${ipaDecoratedContract.CODICEIPA}'`;
-          context.log.error(errorMessage);
-          return new FiscalCodeNotFoundError(errorMessage);
-        }
+        flow(
+          ipaDecoratedContract =>
+            `Fiscal Code not found in IPA Open Data for IPA code '${ipaDecoratedContract.CODICEIPA}'`,
+          errorMessage => logMessage(context.log.error, errorMessage),
+          errorMessage => new FiscalCodeNotFoundError(errorMessage)
+        )
       )
     )
   );
@@ -169,23 +180,25 @@ const saveMembership = (context: Context, dao: Dao) => (
           mainInstitution: contract.isEnteCentrale,
           status: "INITIAL"
         }),
-      e => {
-        const errorMessage = `Database upsert relationship for codiceIPA = '${
-          contract.CODICEIPA
-        }' failed. Reason: status code = '${String(e)}'`;
-        context.log.error(errorMessage);
-        return new UpsertError(errorMessage);
-      }
+      flow(
+        error =>
+          `Database upsert relationship for codiceIPA = '${
+            contract.CODICEIPA
+          }' failed. Reason: ${String(error)}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        errorMessage => new UpsertError(errorMessage)
+      )
     ),
     TE.map(response => response.statusCode),
     TE.chainEitherK(
       E.fromPredicate(
         statusCode => statusCode >= 200 && statusCode < 300,
-        statusCode => {
-          const errorMessage = `Database upsert relationship for codiceIPA = '${contract.CODICEIPA}' failed. Reason: status code = '${statusCode}'`;
-          context.log.error(errorMessage);
-          return new UpsertError(errorMessage);
-        }
+        flow(
+          statusCode =>
+            `Database upsert relationship for codiceIPA = '${contract.CODICEIPA}' failed. Reason: status code = '${statusCode}'`,
+          errorMessage => logMessage(context.log.error, errorMessage),
+          errorMessage => new UpsertError(errorMessage)
+        )
       )
     ),
     TE.map(_ => contract)
@@ -218,24 +231,28 @@ const fetchPecDelegates = (context: Context, dao: Dao) => (
         } while (response.hasMoreResults);
         return delegates;
       },
-      e => {
-        const errorMessage = `Failed to fetch delegates for attachment id = ${
-          contract.IDALLEGATO
-        }. Reason: ${String(e)}`;
-        context.log.error(errorMessage);
-        return new FetchPecDelegatesError(errorMessage);
-      }
+      flow(
+        error =>
+          `Failed to fetch delegates for attachment id = ${
+            contract.IDALLEGATO
+          }. Reason: ${String(error)}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        errorMessage => new FetchPecDelegatesError(errorMessage)
+      )
     ),
     TE.chainEitherK(
       flow(
         RA.map(
           flow(
             PecDelegate.decode,
-            E.mapLeft(e => {
-              const errorMessage = readableReport(e);
-              context.log.error(errorMessage);
-              return new ValidationError(errorMessage);
-            })
+            E.mapLeft(
+              flow(
+                readableReport,
+                errorMessage =>
+                  logMessage(context.log.error, `PecDelegate: ${errorMessage}`),
+                errorMessage => new ValidationError(errorMessage)
+              )
+            )
           )
         ),
         E.sequenceArray // TODO: how to "accumulate" errors?
@@ -249,38 +266,39 @@ const fetchPecAttachment = (context: Context, dao: Dao) => (
 ): TE.TaskEither<unknown, AttachmentDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
-      () =>
-        dao("pecAllegato").readItemById(
-          contract.IDALLEGATO.toString(),
-          contract.IDALLEGATO
-        ),
-      e => {
-        const errorMessage = `Database find pecAllegato by id = '${
-          contract.IDALLEGATO
-        }'. Reason: status code = '${String(e)}'`;
-        context.log.error(errorMessage);
-        return new FetchPecAttachmentError(errorMessage);
-      }
+      () => dao("pecAllegato").readItemById(contract.IDALLEGATO.toString()),
+      flow(
+        error =>
+          `Database find pecAllegato by id = '${
+            contract.IDALLEGATO
+          }'. Reason: ${String(error)}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        errorMessage => new FetchPecAttachmentError(errorMessage)
+      )
     ),
     TE.chainEitherK(
       E.fromPredicate(
         response => response.statusCode >= 200 && response.statusCode < 300,
-        response => {
-          const errorMessage = `Database find pecAllegato by id = '${contract.IDALLEGATO}'. Reason: status code = '${response.statusCode}'`;
-          context.log.error(errorMessage);
-          return new FetchPecAttachmentError(errorMessage);
-        }
+        flow(
+          response =>
+            `Database find pecAllegato by id = '${contract.IDALLEGATO}'. Reason: status code = '${response.statusCode}'`,
+          errorMessage => logMessage(context.log.error, errorMessage),
+          errorMessage => new FetchPecAttachmentError(errorMessage)
+        )
       )
     ),
     TE.chainEitherK(
       flow(
         response => response.resource,
         PecAllegato.decode,
-        E.mapLeft(errors => {
-          const errorMessage = readableReport(errors);
-          context.log.error(errorMessage);
-          return new ValidationError(errorMessage);
-        })
+        E.mapLeft(
+          flow(
+            readableReport,
+            errorMessage =>
+              logMessage(context.log.error, `PecAllegato: ${errorMessage}`),
+            errorMessage => new ValidationError(errorMessage)
+          )
+        )
       )
     ),
     TE.map(pecAttachment => ({ ...contract, attachment: pecAttachment }))
@@ -324,25 +342,25 @@ const saveContract = (context: Context, dao: Dao) => (
           ipaCode: contract.CODICEIPA,
           version: contract.TIPOCONTRATTO
         }),
-      e => {
-        const errorMessage = `Database upsert contracts for codiceIPA = '${
-          contract.CODICEIPA
-        }' and id = '${contract.id}' failed. Reason: status code = '${String(
-          e
-        )}'`;
-        context.log.error(errorMessage);
-        return new SaveContractError();
-      }
+      flow(
+        error =>
+          `Database upsert contracts for codiceIPA = '${
+            contract.CODICEIPA
+          }' and id = '${contract.id}' failed. Reason: ${String(error)}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        errorMessage => new SaveContractError(errorMessage)
+      )
     ),
     TE.map(response => response.statusCode),
     TE.chainEitherK(
       E.fromPredicate(
         statusCode => statusCode >= 200 && statusCode < 300,
-        statusCode => {
-          const errorMessage = `Database upsert contracts for codiceIPA = '${contract.CODICEIPA}' and id = '${contract.id}' failed. Reason: status code = '${statusCode}'`;
-          context.log.error(errorMessage);
-          return new SaveContractError(errorMessage);
-        }
+        flow(
+          statusCode =>
+            `Database upsert contracts for codiceIPA = '${contract.CODICEIPA}' and id = '${contract.id}' failed. Reason: status code = '${statusCode}'`,
+          errorMessage => logMessage(context.log.error, errorMessage),
+          errorMessage => new SaveContractError(errorMessage)
+        )
       )
     ),
     TE.map(_ => void 0)
@@ -357,7 +375,9 @@ const HandleSingleDocument = (
   pipe(
     document,
     PecContratto.decode,
-    E.mapLeft(errors => new ValidationError(readableReport(errors))),
+    E.mapLeft(
+      errors => new ValidationError(`PecContratto: ${readableReport(errors)}`)
+    ),
     TE.fromEither,
     TE.chain(pecContract =>
       pipe(
@@ -400,8 +420,7 @@ const OnContractChangeHandler = (
         Array.isArray(documents) ? documents : [documents],
         RA.filter(document =>
           pipe(
-            document.TIPOCONTRATTO,
-            TipoContratto.decode,
+            TipoContratto.decode(document.TIPOCONTRATTO),
             E.mapLeft(_ =>
               context.log.info(
                 `TIPOCONTRATTO = '${document.TIPOCONTRATTO}' not allowed. Skip item!`
