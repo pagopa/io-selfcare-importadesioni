@@ -111,8 +111,7 @@ const fetchMembership = (context: Context, dao: Dao) => (
 ): TE.TaskEither<unknown, MembershipDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
-      () =>
-        dao("memberships").readItemById(contract.CODICEIPA, contract.CODICEIPA),
+      () => dao("memberships").readItemById(contract.CODICEIPA),
       flow(
         error =>
           `Database find relationship by id for codiceIPA = '${

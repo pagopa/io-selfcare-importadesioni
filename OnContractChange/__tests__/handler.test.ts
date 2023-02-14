@@ -146,7 +146,7 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(1);
     expect(mockDao).toBeCalledWith("memberships");
     expect(mockReadItemById).toBeCalledTimes(1);
-    expect(mockReadItemById).toBeCalledWith(document.CODICEIPA.toLowerCase(), document.CODICEIPA.toLowerCase());
+    expect(mockReadItemById).toBeCalledWith(document.CODICEIPA.toLowerCase());
     expect(mockReadItemsByQuery).toBeCalledTimes(0);
     expect(mockUpsert).toBeCalledTimes(0);
   });
@@ -287,7 +287,7 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(4);
     expect(mockDao).lastCalledWith("pecAllegato");
     expect(mockReadItemById).toBeCalledTimes(2);
-    expect(mockReadItemById).lastCalledWith(document.IDALLEGATO.toString(), document.IDALLEGATO);
+    expect(mockReadItemById).lastCalledWith(document.IDALLEGATO.toString());
     expect(mockUpsert).toBeCalledTimes(1);
     expect(mockReadItemsByQuery).toBeCalledTimes(1);
   });
