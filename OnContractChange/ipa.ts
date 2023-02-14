@@ -1,10 +1,7 @@
 /**
  * Utility functions to read data from IPA Open Data (CSV formatted).
  */
-import { pipeline } from "stream/promises";
-import { Transform } from "stream";
-import { parse } from "csv-parse";
-
+import { parse } from "csv-parse/sync";
 import { getBlobAsText } from "@pagopa/io-functions-commons/dist/src/utils/azure_storage";
 import { pipe } from "fp-ts/lib/function";
 import * as TE from "fp-ts/lib/TaskEither";
@@ -18,31 +15,17 @@ export type FiscalCode = string;
 export type IpaOpenData = ReadonlyMap<IpaCode, FiscalCode>;
 
 /**
- * Read data from a {@link stream} and transform its content into an {@link IpaOpenData} instance
+ * Read data from a {@link string} and transform its content into an {@link IpaOpenData} instance
  *
- * @param stream a stream reader of IPA Open Data (CSV formatted)
+ * @param stream a row string of IPA Open Data (CSV formatted)
  * @returns an {@link IpaOpenData} instance
  */
-export const parseIpaData = async (stream: string): Promise<IpaOpenData> => {
+export const parseIpaData = async (data: string): Promise<IpaOpenData> => {
   const ipaCode2FiscalCode = new Map<string, string>();
-  await pipeline(
-    stream,
-    parse(stream, { from_line: 2 }),
-    new Transform({
-      flush: (callback): void => {
-        callback(null, ipaCode2FiscalCode);
-      },
-      objectMode: true,
-      transform: (row, _, callback): void => {
-        try {
-          ipaCode2FiscalCode.set(row[1], row[3]);
-        } catch (e) {
-          return callback(e as Error | null | undefined);
-        }
-        return callback();
-      }
-    })
-  );
+  const records: ReadonlyArray<ReadonlyArray<string>> = parse(data, {
+    from_line: 2
+  });
+  records.forEach(row => ipaCode2FiscalCode.set(row[1], row[3]));
   return ipaCode2FiscalCode;
 };
 
