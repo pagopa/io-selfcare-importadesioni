@@ -56,7 +56,7 @@ const readItemById = <T extends ItemDefinition>(
   containerId: string
 ) => (
   itemId: string,
-  partitionKeyValue?: PartitionKey
+  partitionKeyValue: PartitionKey = itemId
 ): Promise<ItemResponse<T>> =>
   database
     .container(containerId)
