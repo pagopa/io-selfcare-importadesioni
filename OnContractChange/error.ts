@@ -6,3 +6,4 @@ export class UpsertError extends Error {}
 export class FetchPecDelegatesError extends Error {}
 export class FetchPecAttachmentError extends Error {}
 export class SaveContractError extends Error {}
+export class NotImplementedError extends Error {}
