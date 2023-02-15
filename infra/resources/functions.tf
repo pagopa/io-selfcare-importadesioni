@@ -86,8 +86,9 @@ module "functions_app" {
     COSMOSDB_KEY                            = module.cosmosdb_account.primary_key
     COSMOSDB_PEC_CONTRACTS_COLLECTION       = "pecContratto"
     COSMOSDB_PEC_CONTRACTS_LEASE_COLLECTION = "pecContrattoLeases"
-    IPA_OPEN_DATA_STORAGE_PATH              = "ipa/ipa-open-data.csv"
-    AzureWebJobsStorage                     = module.storage_account.primary_connection_string
+
+    INTERNAL_STORAGE_CONNECTION_STRING = module.storage_account.primary_connection_string
+    IPA_OPEN_DATA_STORAGE_PATH         = "ipa/ipa-open-data.csv"
 
     # Selfcare connection
     SELFCARE_API_URL = "" # TBD
