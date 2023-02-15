@@ -3,12 +3,14 @@ import { flow, pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/lib/Either";
 import * as TE from "fp-ts/lib/TaskEither";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
+import { NonNegativeNumber } from "@pagopa/ts-commons/lib/numbers";
 import {
   NotImplementedError,
   ValidationError
 } from "../OnContractChange/error";
 import { withJsonInput } from "../utils/misc";
 import { Dao } from "../OnContractChange/dao";
+import { TipoDelegatoEnum } from "../OnContractChange/handler";
 
 type IpaCode = t.TypeOf<typeof IpaCode>;
 const IpaCode = t.string;
@@ -16,6 +18,15 @@ const IpaCode = t.string;
 type QueueItem = t.TypeOf<typeof QueueItem>;
 const QueueItem = t.type({
   ipaCode: IpaCode
+});
+
+type Membership = t.TypeOf<typeof Membership>;
+const Membership = t.type({
+  fiscalCode: t.string,
+  id: t.string,
+  ipaCode: t.string,
+  mainInstitution: t.boolean,
+  status: t.string
 });
 
 type Delegate = t.TypeOf<typeof Contract>;
@@ -28,8 +39,9 @@ const Delegate = t.type({
 
 type Contract = t.TypeOf<typeof Contract>;
 const Contract = t.type({
-  id: t.string,
-  ipaCode: IpaCode
+  CODICEIPA: IpaCode,
+  IDALLEGATO: NonNegativeNumber,
+  id: t.string
 });
 
 type ContractWithDelegates = t.TypeOf<typeof ContractWithDelegates>;
@@ -46,24 +58,56 @@ type SelfCareMembershipClaimParams = {
 };
 
 // retrieve the list of contracts relative to a Membership, identified by its ipa code
-const fetchContractsByIpaCode = (_dao: Dao) => (
-  _ipaCode: IpaCode
+const fetchContractsByIpaCode = (dao: Dao) => (
+  ipaCode: IpaCode
 ): TE.TaskEither<Error, ReadonlyArray<Contract>> =>
-  TE.left(
-    new NotImplementedError("fetchContractsByIpaCode() - Not implemented yet")
+  pipe(
+    TE.tryCatch(
+      () =>
+        dao("contracts").readAllItemsByQuery({
+          parameters: [{ name: "@ipaCode", value: ipaCode }],
+          query: "SELECT * FROM contracts d WHERE d.ipaCode = @ipaCode"
+        }),
+      E.toError
+    ),
+    TE.chain(
+      flow(
+        t.readonlyArray(Contract).decode,
+        TE.fromEither,
+        TE.mapLeft(flow(readableReport, E.toError))
+      )
+    )
   );
 
 // Given a list of contracts, get the sublist of the ones we should consider in our process
 const selectContract = (contracts: ReadonlyArray<Contract>): Contract =>
   contracts[0];
 
-const retrieveDelegates = (_dao: Dao) => (
-  _contract: Contract
+const retrieveDelegates = (dao: Dao) => (
+  contract: Contract
 ): TE.TaskEither<Error, ContractWithDelegates> =>
-  TE.left(new NotImplementedError("retrieveDelegates() - Not implemented yet"));
+  pipe(
+    TE.tryCatch(
+      () =>
+        dao("pecDelegato").readAllItemsByQuery({
+          parameters: [{ name: "@IDALLEGATO", value: contract.IDALLEGATO }],
+          query: "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = @IDALLEGATO"
+        }),
+      E.toError
+    ),
+    TE.chain(
+      flow(
+        t.readonlyArray(Delegate).decode,
+        TE.fromEither,
+        TE.mapLeft(flow(readableReport, E.toError))
+      )
+    ),
+    TE.map(delegates => ({ ...contract, delegates }))
+  );
 
 // Check if a person with manager role has been declared in at least one of the contracts
-const hasManager = (_contract: ContractWithDelegates): boolean => false;
+const hasManager = ({ delegates }: ContractWithDelegates): boolean =>
+  delegates.some(d => d.role === TipoDelegatoEnum.PRINCIPALE);
 
 // Prepare data to be sent to SelfCare
 const composeSelfCareMembershipClaim = (
@@ -82,18 +126,34 @@ const submitMembershipClaimToSelfcare = (
   );
 
 // Save that the memebeship is not meant to be processed by the current business logic
-const markMembershipAsDiscarded = (_dao: Dao) => (
-  _ipaCode: IpaCode
+const markMembership = (dao: Dao) => (
+  ipaCode: IpaCode,
+  status: string
 ): TE.TaskEither<Error, void> =>
-  TE.left(new NotImplementedError("discardMembership() - Not implemented yet"));
+  pipe(
+    TE.tryCatch(() => dao("memberships").readItemById(ipaCode), E.toError),
+    TE.chain(
+      flow(
+        Membership.decode,
+        TE.fromEither,
+        TE.mapLeft(flow(readableReport, E.toError))
+      )
+    ),
+    TE.chain(m =>
+      TE.tryCatch(() => dao("memberships").upsert({ ...m, status }), E.toError)
+    ),
+    TE.map(_ => void 0)
+  );
+
+// Save that the memebeship is not meant to be processed by the current business logic
+const markMembershipAsDiscarded = (dao: Dao) => (
+  ipaCode: IpaCode
+): TE.TaskEither<Error, void> => markMembership(dao)(ipaCode, "discarded");
 
 // Save that the memebeship has been correctly claimed to SelfCare
-const markMembershipAsCompleted = (_dao: Dao) => (
-  _ipaCode: IpaCode
-): TE.TaskEither<Error, void> =>
-  TE.left(
-    new NotImplementedError("markMembershipAsCompleted() - Not implemented yet")
-  );
+const markMembershipAsCompleted = (dao: Dao) => (
+  ipaCode: IpaCode
+): TE.TaskEither<Error, void> => markMembership(dao)(ipaCode, "completed");
 
 const createHandler = ({
   dao

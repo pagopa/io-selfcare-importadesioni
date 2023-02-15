@@ -4,17 +4,26 @@ import { Dao } from "../../OnContractChange/dao";
 import { NotImplementedError, ValidationError } from "../../OnContractChange/error";
 import createHandler from "../handler";
 
+const aContract = {
+    CODICEIPA: "CODICEIPA",
+    id: "id",
+    IDALLEGATO: 1,
+    TIPOCONTRATTO: "V1.0"
+  };
+
 const mockReadItemById = jest.fn<Promise<ItemResponse<any>>, [itemId: string, partitionKeyValue?: unknown]>();
 
-const mockReadItemsByQuery = jest.fn<Promise<FeedResponse<unknown>>, [query: string | SqlQuerySpec, options?: FeedOptions | undefined]>();
+const mockAllItemsByQuery = jest.fn(async () => [aContract]);
+const mockReadItemsByQuery = jest.fn();
 
-const mockUpsert = jest.fn<Promise<ItemResponse<ItemDefinition>>, [item: unknown]>();
+const mockUpsert = jest.fn();
 
-const mockDao = jest.fn<ReturnType<Dao>, Parameters<Dao>>(_ => ({
+const mockDao = jest.fn(_ => ({
+  readAllItemsByQuery: mockAllItemsByQuery,
   readItemById: mockReadItemById,
   readItemsByQuery: mockReadItemsByQuery,
   upsert: mockUpsert
-}));
+})) as unknown as Dao;
 
 const mockContext = ({
   bindings: {

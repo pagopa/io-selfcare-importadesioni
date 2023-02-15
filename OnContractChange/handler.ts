@@ -52,7 +52,7 @@ type IpaDecoratedPecContract = PecContratto & {
   readonly ipaFiscalCode?: string;
 };
 
-enum TipoDelegatoEnum {
+export enum TipoDelegatoEnum {
   PRINCIPALE = "Principale",
   SECONDARIO = "Secondario",
   ALTRO = "Altro"
