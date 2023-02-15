@@ -28,10 +28,17 @@ const Delegate = t.type({
 
 type Contract = t.TypeOf<typeof Contract>;
 const Contract = t.type({
-  delegates: t.readonlyArray(Delegate),
   id: t.string,
   ipaCode: IpaCode
 });
+
+type ContractWithDelegates = t.TypeOf<typeof ContractWithDelegates>;
+const ContractWithDelegates = t.intersection([
+  Contract,
+  t.type({
+    delegates: t.readonlyArray(Delegate)
+  })
+]);
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 type SelfCareMembershipClaimParams = {
@@ -50,13 +57,18 @@ const fetchContractsByIpaCode = (_dao: Dao) => (
 const selectContract = (contracts: ReadonlyArray<Contract>): Contract =>
   contracts[0];
 
+const retrieveDelegates = (_dao: Dao) => (
+  _contract: Contract
+): TE.TaskEither<Error, ContractWithDelegates> =>
+  TE.left(new NotImplementedError("retrieveDelegates() - Not implemented yet"));
+
 // Check if a person with manager role has been declared in at least one of the contracts
-const hasManager = (_contract: Contract): boolean => false;
+const hasManager = (_contract: ContractWithDelegates): boolean => false;
 
 // Prepare data to be sent to SelfCare
 const composeSelfCareMembershipClaim = (
   _ipaCode: IpaCode,
-  _contracts: Contract
+  _contracts: ContractWithDelegates
 ): SelfCareMembershipClaimParams => ({});
 
 // Submit the claim to SelfCare to import the memebership
@@ -107,6 +119,7 @@ const createHandler = ({
             ipaCode,
             fetchContractsByIpaCode(dao),
             TE.map(selectContract),
+            TE.chain(retrieveDelegates(dao)),
             TE.map(contract => ({ contract, ipaCode }))
           )
         ),
