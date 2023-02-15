@@ -47,9 +47,9 @@ const fetchContractsByIpaCode = (_dao: Dao) => (
   );
 
 // Given a list of contracts, get the sublist of the ones we should consider in our process
-const filterContracts = (
+const selectContract = (
   contracts: ReadonlyArray<Contract>
-): ReadonlyArray<Contract> => contracts;
+): Contract => contracts[0];
 
 // Check if a person with manager role has been declared in at least one of the contracts
 const hasManager = (_contracts: ReadonlyArray<Contract>): boolean => false;
