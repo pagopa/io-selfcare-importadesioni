@@ -11,14 +11,6 @@
       "leaseCollectionName": "%COSMOSDB_PEC_CONTRACTS_LEASE_COLLECTION%",
       "createLeaseCollectionIfNotExists": true,
       "startFromBeginning": true
-    },
-    {
-      "name": "ipaOpenData",
-      "type": "blob",
-      "path": "%IPA_OPEN_DATA_STORAGE_PATH%",
-      "connection": "AzureWebJobsStorage",
-      "direction": "in",
-      "dataType": "stream"
     }
   ],
   "scriptFile": "../dist/OnContractChange/index.js"

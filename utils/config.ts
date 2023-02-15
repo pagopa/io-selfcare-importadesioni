@@ -25,7 +25,7 @@ export const IConfig = t.interface({
 
   INTERNAL_STORAGE_CONNECTION_STRING: NonEmptyString,
 
-  IPA_OPENDATA_URL: NonEmptyString,
+  IPA_OPEN_DATA_STORAGE_PATH: NonEmptyString,
 
   isProduction: t.boolean
 });

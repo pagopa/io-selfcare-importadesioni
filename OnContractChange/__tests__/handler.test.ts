@@ -3,13 +3,16 @@ import { Context } from "@azure/functions";
 import { Dao, IAttachment, IDelegate } from "../dao";
 import{ FetchMembershipError, FetchPecAttachmentError, FetchPecDelegatesError, FiscalCodeNotFoundError, SaveContractError, UpsertError, ValidationError } from "../error";
 import OnContractChangeHandler, { TipoContrattoEnum } from "../handler";
-import { IpaOpenData } from "../ipa";
 
-const NO_BINDING_DATA = "placeholder for no data";
+import * as TE from "fp-ts/lib/TaskEither";
+import * as E from "fp-ts/lib/Either";
+
 const mockContext = ({
-  bindings: {
-    log: console,
-    ipaOpenData: NO_BINDING_DATA
+  log: {
+    error: jest.fn().mockImplementation(console.log),
+    info: jest.fn().mockImplementation(console.log),
+    verbose: jest.fn().mockImplementation(console.log),
+    warn: jest.fn().mockImplementation(console.log)
   }
 } as unknown) as Context;
 
@@ -25,14 +28,17 @@ const mockDao = jest.fn<ReturnType<Dao>, Parameters<Dao>>(_ => ({
   upsert: mockUpsert
 }));
 
-const mockReadIpaData = jest.fn<Promise<IpaOpenData>, [NodeJS.ReadableStream]>();
+
+const mockIpaDefaultError = TE.left(new Error("mockReadIpaData not initialized"))
+const mockIpaAnyData = TE.right(new Map())
+
+
 
 beforeEach(() => {
   jest.resetAllMocks();
   mockReadItemById.mockRejectedValue(new Error("mockReadItemsByQuery not initialized"))
   mockReadItemsByQuery.mockRejectedValue(new Error("mockReadItemsByQuery not initialized"))
   mockUpsert.mockRejectedValue(new Error("mockUpsert not initialized"))
-  mockReadIpaData.mockRejectedValue(new Error("mockReadIpaData not initialized"))
   mockDao.mockImplementation(_ => ({
     readItemById: mockReadItemById,
     readItemsByQuery: mockReadItemsByQuery,
@@ -83,19 +89,37 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
 
   it("should do nothing", async () => {
     const document = new Array();
-    const result = await OnContractChangeHandler(mockDao, mockReadIpaData)(
+    const result = await OnContractChangeHandler(mockDao, mockIpaAnyData)(
       mockContext,
       document
     );
     expect(result).toHaveLength(0);
     expect(mockDao).toBeCalledTimes(0);
-    expect(mockReadIpaData).toBeCalledTimes(0);
+  });
+  
+  it.each`
+    tipoContratto
+    ${"Ins. Manuale"}
+    ${null}
+    ${undefined}
+  `
+  ("should skip item: tipoContratto = $tipoContratto", async ({tipoContratto}) => {
+    const document = {...validDocument, TIPOCONTRATTO: tipoContratto};
+    try {
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
+        mockContext,
+        document
+      );
+    } catch (error) {
+      fail();
+    }
+    expect(mockDao).toBeCalledTimes(0);
   });
 
-  it("should fails document validation", async () => {
-    const document = {...validDocument, TIPOCONTRATTO: "TIPOCONTRATTO"};
+  it("should fail document validation", async () => {
+    const document = {...validDocument, CODICEIPA: undefined};
     try {
-      await OnContractChangeHandler(mockDao, mockReadIpaData)(
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
         document
       );
@@ -104,35 +128,14 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
       expect(error).toBeInstanceOf(ValidationError);
     }
     expect(mockDao).toBeCalledTimes(0);
-    expect(mockReadIpaData).toBeCalledTimes(0);
   });
-
-  it.each`
-    tipoContratto
-    ${TipoContrattoEnum.MANUAL}
-    ${null}
-  `
-  ("should skip item: tipoContratto = $tipoContratto", async () => {
-    const document = {...validDocument, TIPOCONTRATTO: TipoContrattoEnum.MANUAL};
-    try {
-      await OnContractChangeHandler(mockDao, mockReadIpaData)(
-        mockContext,
-        document
-      );
-    } catch (error) {
-      fail();
-    }
-    expect(mockDao).toBeCalledTimes(0);
-    expect(mockReadIpaData).toBeCalledTimes(0);
-  });
-
 
   it("should fails on fetching membership", async () => {
     const document = {...validDocument};
     const mockReadItemByIdResult = {statusCode: 500} as ItemResponse<any>;
     mockReadItemById.mockResolvedValueOnce(mockReadItemByIdResult);
     try {
-      await OnContractChangeHandler(mockDao, mockReadIpaData)(
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
         document
       );
@@ -143,19 +146,17 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(1);
     expect(mockDao).toBeCalledWith("memberships");
     expect(mockReadItemById).toBeCalledTimes(1);
-    expect(mockReadItemById).toBeCalledWith(document.CODICEIPA, document.CODICEIPA);
+    expect(mockReadItemById).toBeCalledWith(document.CODICEIPA.toLowerCase());
     expect(mockReadItemsByQuery).toBeCalledTimes(0);
     expect(mockUpsert).toBeCalledTimes(0);
-    expect(mockReadIpaData).toBeCalledTimes(0);
   });
-
 
    it("should fail fetch fiscal code from IPA", async () => {
     const document = {...validDocument};
     const mockReadItemByIdResult = {statusCode: 404} as ItemResponse<any>;
     mockReadItemById.mockResolvedValueOnce(mockReadItemByIdResult);
     // force to return an undefined fiscal code to test robustness
-    mockReadIpaData.mockResolvedValueOnce(new Map([[document.CODICEIPA, undefined as any]]));
+    const mockReadIpaData = TE.right(new Map([[document.CODICEIPA.toLowerCase(), undefined as any]]));
     try {
       await OnContractChangeHandler(mockDao, mockReadIpaData)(
         mockContext,
@@ -168,9 +169,6 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(1);
     expect(mockDao).toBeCalledWith("memberships");
     expect(mockReadItemById).toBeCalledTimes(1);
-    expect(mockReadItemById).toBeCalledWith(document.CODICEIPA, document.CODICEIPA);
-    expect(mockReadIpaData).toBeCalledTimes(1);
-    expect(mockReadIpaData).toBeCalledWith(mockContext.bindings.ipaOpenData);
     expect(mockUpsert).toBeCalledTimes(0);
     expect(mockReadItemsByQuery).toBeCalledTimes(0);
   });
@@ -178,11 +176,10 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
    it("should fail to save a not 'Main Institution' membership", async () => {
     const document = {...validDocument};
     mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>);
-    const mockIpaOpenData = new Map();
-    mockReadIpaData.mockResolvedValueOnce(mockIpaOpenData);
+    
     mockUpsert.mockResolvedValueOnce({statusCode: 500} as ItemResponse<any>);
     try {
-      await OnContractChangeHandler(mockDao, mockReadIpaData)(
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
         document
       );
@@ -193,13 +190,10 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(2);
     expect(mockDao).toBeCalledWith("memberships");
     expect(mockReadItemById).toBeCalledTimes(1);
-    expect(mockReadItemById).toBeCalledWith(document.CODICEIPA, document.CODICEIPA);
-    expect(mockReadIpaData).toBeCalledTimes(1);
-    expect(mockReadIpaData).toBeCalledWith(mockContext.bindings.ipaOpenData);
     expect(mockUpsert).toBeCalledTimes(1);
-    expect(mockUpsert).toBeCalledWith({id: document.CODICEIPA,
-      fiscalCode: mockIpaOpenData.get(document.CODICEIPA),
-      ipaCode: document.CODICEIPA,
+    expect(mockUpsert).toBeCalledWith({id: document.CODICEIPA.toLowerCase(),
+      fiscalCode: undefined, //mockIpaOpenData.get(document.CODICEIPA.toLowerCase()),
+      ipaCode: document.CODICEIPA.toLowerCase(),
       mainInstitution: false,
       status: "INITIAL"});
     expect(mockReadItemsByQuery).toBeCalledTimes(0);
@@ -208,11 +202,11 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
    it("should fail to fetch delegates caused by Database error", async () => {
     const document = {...validDocument};
     mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>);
-    mockReadIpaData.mockResolvedValueOnce(new Map());
+    
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
     mockReadItemsByQuery.mockRejectedValueOnce({status: "500", reason: "error"});
     try {
-      await OnContractChangeHandler(mockDao, mockReadIpaData)(
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
         document
       );
@@ -223,14 +217,8 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(3);
     expect(mockDao).lastCalledWith("pecDelegato");
     expect(mockReadItemById).toBeCalledTimes(1);
-    expect(mockReadIpaData).toBeCalledTimes(1);
     expect(mockUpsert).toBeCalledTimes(1);
     expect(mockReadItemsByQuery).toBeCalledTimes(1);
-    expect(mockReadItemsByQuery).toBeCalledWith({
-      parameters: [{ name: "@idAllegato", value: document.IDALLEGATO }],
-      query: "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = *@idAllegato*"
-    },
-    { continuationToken: undefined });
   });
 
    it("should fail to fetch delegates caused by result validation error", async () => {
@@ -247,12 +235,12 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     ] as FeedResponse<unknown>[];
     mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>);
-    mockReadIpaData.mockResolvedValueOnce(new Map());
+    
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
     mockReadItemsByQuery.mockResolvedValueOnce(mockReadItemsByQueryResults[0])
                         .mockResolvedValueOnce(mockReadItemsByQueryResults[1]);
     try {
-      await OnContractChangeHandler(mockDao, mockReadIpaData)(
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
         document
       );
@@ -263,12 +251,11 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(4);
     expect(mockDao).lastCalledWith("pecDelegato");
     expect(mockReadItemById).toBeCalledTimes(1);
-    expect(mockReadIpaData).toBeCalledTimes(1);
     expect(mockUpsert).toBeCalledTimes(1);
     expect(mockReadItemsByQuery).toBeCalledTimes(2);
      const sqlQuerySpec = {
        parameters: [{ name: "@idAllegato", value: document.IDALLEGATO }],
-       query: "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = *@idAllegato*"
+       query: "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = @idAllegato"
      };
     expect(mockReadItemsByQuery).nthCalledWith(1, sqlQuerySpec,
     { continuationToken: undefined });
@@ -285,11 +272,11 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     const document = {...validDocument};
     mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: fetchAttachmentStatusCode, resource: fetchAttachmentResult} as ItemResponse<any>);
-    mockReadIpaData.mockResolvedValueOnce(new Map());
+    
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
     mockReadItemsByQuery.mockResolvedValueOnce({hasMoreResults: false, resources: [{...validPecDelegate}]} as FeedResponse<unknown>);
     try {
-      await OnContractChangeHandler(mockDao, mockReadIpaData)(
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
         document
       );
@@ -300,8 +287,7 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(4);
     expect(mockDao).lastCalledWith("pecAllegato");
     expect(mockReadItemById).toBeCalledTimes(2);
-    expect(mockReadItemById).lastCalledWith(document.IDALLEGATO.toString(), document.IDALLEGATO);
-    expect(mockReadIpaData).toBeCalledTimes(1);
+    expect(mockReadItemById).lastCalledWith(document.IDALLEGATO.toString());
     expect(mockUpsert).toBeCalledTimes(1);
     expect(mockReadItemsByQuery).toBeCalledTimes(1);
   });
@@ -312,12 +298,12 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     const mockReadPecDelegatesByQueryResult = [{ ...validPecDelegate }];
     mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
-    mockReadIpaData.mockResolvedValueOnce(new Map());
+    
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
               .mockResolvedValueOnce({statusCode: 500} as ItemResponse<any>);
     mockReadItemsByQuery.mockResolvedValueOnce({hasMoreResults: false, resources: mockReadPecDelegatesByQueryResult} as FeedResponse<unknown>);
     try {
-      await OnContractChangeHandler(mockDao, mockReadIpaData)(
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
         document
       );
@@ -328,10 +314,17 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     expect(mockDao).toBeCalledTimes(5);
     expect(mockDao).lastCalledWith("contracts");
     expect(mockReadItemById).toBeCalledTimes(2);
-    expect(mockReadIpaData).toBeCalledTimes(1);
+    
     expect(mockUpsert).toBeCalledTimes(2);
     expect(mockReadItemsByQuery).toBeCalledTimes(1);
-    expect(mockUpsert).lastCalledWith({id: document.id, ipaCode: document.CODICEIPA, fiscalCode: undefined, version: document.TIPOCONTRATTO, delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), attachment: mapAttachment(mockReadPecAttachmentByIdResult)});
+    expect(mockUpsert).lastCalledWith({
+      id: document.id, 
+      ipaCode: document.CODICEIPA.toLowerCase(), 
+      fiscalCode: undefined, //mockIpaOpenData.get(document.CODICEIPA.toLowerCase()),
+      version: document.TIPOCONTRATTO, 
+      delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), 
+      attachment: mapAttachment(mockReadPecAttachmentByIdResult)
+    });
   });
 
    it.each`
@@ -345,12 +338,12 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     const mockReadPecDelegatesByQueryResult = [{ ...validPecDelegate }];
     mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
-    mockReadIpaData.mockResolvedValueOnce(ipaOpenData);
+    
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
               .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
     mockReadItemsByQuery.mockResolvedValueOnce({hasMoreResults: false, resources: mockReadPecDelegatesByQueryResult} as FeedResponse<unknown>);
     try {
-      await OnContractChangeHandler(mockDao, mockReadIpaData)(
+      await OnContractChangeHandler(mockDao, TE.right(ipaOpenData))(
         mockContext,
         document
       );
@@ -359,14 +352,20 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     }
     expect(mockDao).toBeCalledTimes(5);
     expect(mockReadItemById).toBeCalledTimes(2);
-    expect(mockReadIpaData).toBeCalledTimes(1);
+  
     expect(mockUpsert).toBeCalledTimes(2);
-    expect(mockUpsert).nthCalledWith(1, {id: document.CODICEIPA,
-      fiscalCode: ipaOpenData.get(document.CODICEIPA),
-      ipaCode: document.CODICEIPA,
-      mainInstitution: ipaOpenData.has(document.CODICEIPA),
+    expect(mockUpsert).nthCalledWith(1, {id: document.CODICEIPA.toLowerCase(),
+      fiscalCode: ipaOpenData.get(document.CODICEIPA.toLowerCase()),
+      ipaCode: document.CODICEIPA.toLowerCase(),
+      mainInstitution: ipaOpenData.has(document.CODICEIPA.toLowerCase()),
       status: "INITIAL"});
-    expect(mockUpsert).nthCalledWith(2, {id: document.id, ipaCode: document.CODICEIPA, version: document.TIPOCONTRATTO, delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), attachment: mapAttachment(mockReadPecAttachmentByIdResult)});
+    expect(mockUpsert).nthCalledWith(2, {
+      id: document.id, 
+      ipaCode: document.CODICEIPA.toLowerCase(), 
+      version: document.TIPOCONTRATTO, 
+      delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), 
+      attachment: mapAttachment(mockReadPecAttachmentByIdResult)
+    });
     expect(mockReadItemsByQuery).toBeCalledTimes(1);
   });
    
@@ -376,12 +375,12 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     const mockReadPecDelegatesByQueryResult = [{ ...validPecDelegate }];
     mockReadItemById.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
-    mockReadIpaData.mockResolvedValueOnce(new Map());
+    
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
               .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
     mockReadItemsByQuery.mockResolvedValueOnce({hasMoreResults: false, resources: mockReadPecDelegatesByQueryResult} as FeedResponse<unknown>);
     try {
-      await OnContractChangeHandler(mockDao, mockReadIpaData)(
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
         document
       );
@@ -390,10 +389,15 @@ const mapDelegate = (pecDelegate: typeof validPecDelegate): IDelegate => ({
     }
     expect(mockDao).toBeCalledTimes(4);
     expect(mockReadItemById).toBeCalledTimes(2);
-    expect(mockReadIpaData).toBeCalledTimes(0);
     expect(mockUpsert).toBeCalledTimes(1);
     expect(mockReadItemsByQuery).toBeCalledTimes(1);
-    expect(mockUpsert).lastCalledWith({id: document.id, ipaCode: document.CODICEIPA, version: document.TIPOCONTRATTO, delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), attachment: mapAttachment(mockReadPecAttachmentByIdResult)});
+    expect(mockUpsert).lastCalledWith({
+      id: document.id, 
+      ipaCode: document.CODICEIPA.toLowerCase(), 
+      version: document.TIPOCONTRATTO, 
+      delegates: mockReadPecDelegatesByQueryResult.map(mapDelegate), 
+      attachment: mapAttachment(mockReadPecAttachmentByIdResult)
+    });
   });
 
 });

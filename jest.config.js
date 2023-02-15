@@ -1,9 +1,8 @@
 module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
-  testPathIgnorePatterns: [
-    "dist",
-    "/node_modules",
-    "schema" /* run tests for db schema separatedly*/
-  ]
+  testPathIgnorePatterns: ["dist", "/node_modules"],
+  moduleNameMapper: {
+    "^csv-parse/sync": "<rootDir>/node_modules/csv-parse/dist/cjs/sync.cjs"
+  }
 };
