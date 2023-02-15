@@ -47,17 +47,16 @@ const fetchContractsByIpaCode = (_dao: Dao) => (
   );
 
 // Given a list of contracts, get the sublist of the ones we should consider in our process
-const filterContracts = (
-  contracts: ReadonlyArray<Contract>
-): ReadonlyArray<Contract> => contracts;
+const selectContract = (contracts: ReadonlyArray<Contract>): Contract =>
+  contracts[0];
 
 // Check if a person with manager role has been declared in at least one of the contracts
-const hasManager = (_contracts: ReadonlyArray<Contract>): boolean => false;
+const hasManager = (_contract: Contract): boolean => false;
 
 // Prepare data to be sent to SelfCare
 const composeSelfCareMembershipClaim = (
   _ipaCode: IpaCode,
-  _contracts: ReadonlyArray<Contract>
+  _contracts: Contract
 ): SelfCareMembershipClaimParams => ({});
 
 // Submit the claim to SelfCare to import the memebership
@@ -73,13 +72,13 @@ const submitMembershipClaimToSelfcare = (
 // Save that the memebeship is not meant to be processed by the current business logic
 const markMembershipAsDiscarded = (_dao: Dao) => (
   _ipaCode: IpaCode
-): TE.TaskEither<Error, ReadonlyArray<Contract>> =>
+): TE.TaskEither<Error, void> =>
   TE.left(new NotImplementedError("discardMembership() - Not implemented yet"));
 
 // Save that the memebeship has been correctly claimed to SelfCare
 const markMembershipAsCompleted = (_dao: Dao) => (
   _ipaCode: IpaCode
-): TE.TaskEither<Error, ReadonlyArray<Contract>> =>
+): TE.TaskEither<Error, void> =>
   TE.left(
     new NotImplementedError("markMembershipAsCompleted() - Not implemented yet")
   );
@@ -107,17 +106,17 @@ const createHandler = ({
           pipe(
             ipaCode,
             fetchContractsByIpaCode(dao),
-            TE.map(filterContracts),
-            TE.map(contracts => ({ contracts, ipaCode }))
+            TE.map(selectContract),
+            TE.map(contract => ({ contract, ipaCode }))
           )
         ),
 
         // process membership with its contracts
-        TE.chain(({ contracts, ipaCode }) =>
-          hasManager(contracts)
+        TE.chain(({ contract, ipaCode }) =>
+          hasManager(contract)
             ? // only memberships with a manager can be imported
               pipe(
-                composeSelfCareMembershipClaim(ipaCode, contracts),
+                composeSelfCareMembershipClaim(ipaCode, contract),
                 submitMembershipClaimToSelfcare({}),
                 TE.chain(_ => markMembershipAsCompleted(dao)(ipaCode))
               )
