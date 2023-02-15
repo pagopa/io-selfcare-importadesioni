@@ -1,5 +1,5 @@
 import * as t from "io-ts";
-import { EmailString, NonEmptyString } from "@pagopa/ts-commons/lib/strings";
+import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { NonNegativeNumber } from "@pagopa/ts-commons/lib/numbers";
 import { Context } from "@azure/functions";
 import { flow, pipe } from "fp-ts/lib/function";
@@ -9,11 +9,10 @@ import * as E from "fp-ts/lib/Either";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import { IpaOpenData, IpaDataReader } from "./ipa";
-import { Dao, IDelegate } from "./dao";
+import { Dao } from "./dao";
 import {
   ValidationError,
   FetchMembershipError,
-  FetchPecDelegatesError,
   FiscalCodeNotFoundError,
   UpsertError,
   FetchPecAttachmentError,
@@ -52,36 +51,6 @@ type IpaDecoratedPecContract = PecContratto & {
   readonly ipaFiscalCode?: string;
 };
 
-enum TipoDelegatoEnum {
-  PRINCIPALE = "Principale",
-  SECONDARIO = "Secondario",
-  ALTRO = "Altro"
-}
-
-const TipoDelegato = enumType<TipoDelegatoEnum>(
-  TipoDelegatoEnum,
-  "TipoDelegato"
-);
-type TipoDelegato = t.TypeOf<typeof TipoDelegato>;
-
-const PecDelegate = t.intersection([
-  t.interface({
-    CODICEFISCALE: NonEmptyString,
-    EMAIL: EmailString,
-    IDALLEGATO: NonNegativeNumber,
-    NOMINATIVO: NonEmptyString,
-    TIPODELEGATO: TipoDelegato,
-    id: NonEmptyString
-  }),
-  t.partial({ QUALIFICA: t.string })
-]);
-
-type PecDelegate = t.TypeOf<typeof PecDelegate>;
-
-type DelegatesDecoratedPecContract = PecContratto & {
-  readonly delegates: ReadonlyArray<PecDelegate>;
-};
-
 const PecAllegato = t.intersection([
   t.interface({
     NOMEALLEGATO: NonEmptyString,
@@ -94,7 +63,7 @@ const PecAllegato = t.intersection([
 
 type PecAllegato = t.TypeOf<typeof PecAllegato>;
 
-type AttachmentDecoratedPecContract = DelegatesDecoratedPecContract & {
+type AttachmentDecoratedPecContract = PecContratto & {
   readonly attachment: PecAllegato;
 };
 
@@ -203,65 +172,8 @@ const saveMembership = (context: Context, dao: Dao) => (
     TE.map(_ => contract)
   );
 
-const fetchPecDelegates = (context: Context, dao: Dao) => (
-  contract: PecContratto
-): TE.TaskEither<unknown, DelegatesDecoratedPecContract> =>
-  pipe(
-    TE.tryCatch(
-      async () => {
-        // eslint-disable-next-line functional/no-let, functional/prefer-readonly-type
-        let delegates: unknown[] = [];
-        // eslint-disable-next-line functional/no-let
-        let response;
-        do {
-          response = await dao("pecDelegato").readItemsByQuery(
-            {
-              parameters: [{ name: "@idAllegato", value: contract.IDALLEGATO }],
-              query:
-                "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = @idAllegato"
-            },
-            {
-              continuationToken: response
-                ? response.continuationToken
-                : undefined
-            }
-          );
-          delegates = delegates.concat(response.resources);
-        } while (response.hasMoreResults);
-        return delegates;
-      },
-      flow(
-        error =>
-          `Failed to fetch delegates for attachment id = ${
-            contract.IDALLEGATO
-          }. Reason: ${String(error)}`,
-        errorMessage => logMessage(context.log.error, errorMessage),
-        errorMessage => new FetchPecDelegatesError(errorMessage)
-      )
-    ),
-    TE.chainEitherK(
-      flow(
-        RA.map(
-          flow(
-            PecDelegate.decode,
-            E.mapLeft(
-              flow(
-                readableReport,
-                errorMessage =>
-                  logMessage(context.log.error, `PecDelegate: ${errorMessage}`),
-                errorMessage => new ValidationError(errorMessage)
-              )
-            )
-          )
-        ),
-        E.sequenceArray // TODO: how to "accumulate" errors?
-      )
-    ),
-    TE.map(delegates => ({ ...contract, delegates }))
-  );
-
 const fetchPecAttachment = (context: Context, dao: Dao) => (
-  contract: DelegatesDecoratedPecContract
+  contract: PecContratto
 ): TE.TaskEither<unknown, AttachmentDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
@@ -318,25 +230,6 @@ const saveContract = (context: Context, dao: Dao) => (
               : contract.attachment.NOMEALLEGATO,
             path: contract.attachment.PATHALLEGATO
           },
-          delegates: contract.delegates.map(
-            (delegate): IDelegate => ({
-              attachmentId: delegate.IDALLEGATO,
-              email: delegate.EMAIL,
-              firstName: delegate.NOMINATIVO.slice(
-                0,
-                delegate.NOMINATIVO.indexOf(" ") === -1
-                  ? undefined
-                  : delegate.NOMINATIVO.indexOf(" ")
-              ).trim(),
-              fiscalCode: delegate.CODICEFISCALE,
-              id: delegate.id,
-              kind: delegate.TIPODELEGATO,
-              lastName: delegate.NOMINATIVO.slice(
-                delegate.NOMINATIVO.indexOf(" ") + 1
-              ).trim(),
-              role: delegate.QUALIFICA
-            })
-          ),
           id: contract.id,
           ipaCode: contract.CODICEIPA,
           version: contract.TIPOCONTRATTO
@@ -397,8 +290,7 @@ const HandleSingleDocument = (
         ),
         TE.chain(
           flow(
-            fetchPecDelegates(context, dao),
-            TE.chain(fetchPecAttachment(context, dao)),
+            fetchPecAttachment(context, dao),
             TE.chain(saveContract(context, dao))
           )
         )
