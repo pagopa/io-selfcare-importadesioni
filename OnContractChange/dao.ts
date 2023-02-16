@@ -19,17 +19,6 @@ export interface IMembership {
   readonly status: string;
 }
 
-export interface IDelegate {
-  readonly email: string;
-  readonly firstName: string;
-  readonly fiscalCode: string;
-  readonly id: string;
-  readonly attachmentId: number;
-  readonly kind: string;
-  readonly lastName: string;
-  readonly role?: string;
-}
-
 export interface IAttachment {
   readonly id: string;
   readonly name: string;
@@ -39,7 +28,6 @@ export interface IAttachment {
 
 export interface IContract {
   readonly attachment: IAttachment;
-  readonly delegates: ReadonlyArray<IDelegate>;
   readonly id: string;
   readonly ipaCode: string;
   readonly version: string;
