@@ -9,6 +9,7 @@ import * as t from "io-ts";
 export type IpaCode = t.TypeOf<typeof IpaCode>;
 export const IpaCode = t.string;
 
+// The status we consider when processing a Membership
 export type MembershipStatus = t.TypeOf<typeof MembershipStatus>;
 export const MembershipStatus = t.union([
   t.literal("Initial"),
@@ -16,12 +17,24 @@ export const MembershipStatus = t.union([
   t.literal("Discarded")
 ]);
 
-export type MainInstitution = t.TypeOf<typeof MainInstitution>;
-export const MainInstitution = t.type({
-  fiscalCode: NonEmptyString,
-  mainInstitution: t.literal(true)
-});
+// The unique version of contract
+export type ContractVersion = t.TypeOf<typeof ContractVersion>;
+export const ContractVersion = t.union([
+  t.literal("V1.0"),
+  t.literal("V2.0"),
+  t.literal("V2.2(17 giugno)"),
+  t.literal("V2.2(29 luglio)")
+]);
 
+export type TipoDelegato = t.TypeOf<typeof TipoDelegato>;
+export const TipoDelegato = t.union([
+  t.literal("Principale"),
+  t.literal("Secondario"),
+  t.literal("Altro")
+]);
+
+// An institution as is processed by our importer
+// and processed
 export type IMembership = t.TypeOf<typeof IMembership>;
 export const IMembership = t.intersection([
   t.type({
@@ -33,6 +46,7 @@ export const IMembership = t.intersection([
   t.partial({ fiscalCode: NonEmptyString, note: t.string })
 ]);
 
+// An attacpment as is processed by our importer
 export type IAttachment = t.TypeOf<typeof IAttachment>;
 export const IAttachment = t.type({
   id: t.string,
@@ -41,6 +55,7 @@ export const IAttachment = t.type({
   path: t.string
 });
 
+// A contract as is processed by our importer
 export type IContract = t.TypeOf<typeof IContract>;
 export const IContract = t.type({
   attachment: IAttachment,
@@ -50,13 +65,7 @@ export const IContract = t.type({
   version: t.string
 });
 
-export type TipoDelegato = t.TypeOf<typeof TipoDelegato>;
-export const TipoDelegato = t.union([
-  t.literal("Principale"),
-  t.literal("Secondario"),
-  t.literal("Altro")
-]);
-
+// Delegate as we read from source data
 export type PecDelegate = t.TypeOf<typeof PecDelegate>;
 export const PecDelegate = t.interface({
   CODICEFISCALE: FiscalCode,
@@ -67,18 +76,11 @@ export const PecDelegate = t.interface({
   id: NonEmptyString
 });
 
+// Enrich contract with relative delegates
 export type IContractWithDelegates = t.TypeOf<typeof IContractWithDelegates>;
 export const IContractWithDelegates = t.intersection([
   IContract,
   t.type({
     delegates: t.readonlyArray(PecDelegate)
   })
-]);
-
-export type TipoContratto = t.TypeOf<typeof TipoContratto>;
-export const TipoContratto = t.union([
-  t.literal("V1.0"),
-  t.literal("V2.0"),
-  t.literal("V2.2(17 giugno)"),
-  t.literal("V2.2(29 luglio)")
 ]);

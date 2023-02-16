@@ -18,7 +18,7 @@ import {
   SaveContractError,
   FetchPecEmailError
 } from "../models/error";
-import { TipoContratto } from "../models/types";
+import { ContractVersion } from "../models/types";
 import { IpaOpenData, IpaDataReader } from "./ipa";
 
 type PecContratto = t.TypeOf<typeof PecContratto>;
@@ -26,7 +26,7 @@ const PecContratto = t.interface({
   CODICEIPA: NonEmptyString,
   IDALLEGATO: NonNegativeNumber,
   IDEMAIL: NonNegativeNumber,
-  TIPOCONTRATTO: TipoContratto,
+  TIPOCONTRATTO: ContractVersion,
   id: NonEmptyString
 });
 
@@ -357,7 +357,7 @@ const OnContractChangeHandler = (
         Array.isArray(documents) ? documents : [documents],
         RA.filter(document =>
           pipe(
-            TipoContratto.decode(document.TIPOCONTRATTO),
+            ContractVersion.decode(document.TIPOCONTRATTO),
             E.mapLeft(_ =>
               context.log.info(
                 `TIPOCONTRATTO = '${document.TIPOCONTRATTO}' not allowed. Skip item!`
