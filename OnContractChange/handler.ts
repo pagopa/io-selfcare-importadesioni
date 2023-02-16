@@ -16,7 +16,8 @@ import {
   FiscalCodeNotFoundError,
   UpsertError,
   FetchPecAttachmentError,
-  SaveContractError
+  SaveContractError,
+  FetchPecEmailError
 } from "./error";
 
 export enum TipoContrattoEnum {
@@ -36,6 +37,7 @@ type TipoContratto = t.TypeOf<typeof TipoContratto>;
 const PecContratto = t.interface({
   CODICEIPA: NonEmptyString,
   IDALLEGATO: NonNegativeNumber,
+  IDEMAIL: NonNegativeNumber,
   TIPOCONTRATTO: TipoContratto,
   id: NonEmptyString
 });
@@ -63,8 +65,12 @@ const PecAllegato = t.intersection([
 
 type PecAllegato = t.TypeOf<typeof PecAllegato>;
 
-type AttachmentDecoratedPecContract = PecContratto & {
+type AttachmentDecoratedPecContract = EmailDecoratedPecContract & {
   readonly attachment: PecAllegato;
+};
+
+type EmailDecoratedPecContract = PecContratto & {
+  readonly emailDate: string;
 };
 
 const logMessage = (
@@ -172,8 +178,51 @@ const saveMembership = (context: Context, dao: Dao) => (
     TE.map(_ => contract)
   );
 
-const fetchPecAttachment = (context: Context, dao: Dao) => (
+const fetchPecEmail = (context: Context, dao: Dao) => (
   contract: PecContratto
+): TE.TaskEither<unknown, EmailDecoratedPecContract> =>
+  pipe(
+    TE.tryCatch(
+      () => dao("pecEmail").readItemById(contract.IDEMAIL.toString()),
+      flow(
+        error =>
+          `Database find pecEmail by id = '${
+            contract.IDEMAIL
+          }'. Reason: ${String(error)}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        errorMessage => new FetchPecEmailError(errorMessage)
+      )
+    ),
+    TE.chainEitherK(
+      E.fromPredicate(
+        response => response.statusCode >= 200 && response.statusCode < 300,
+        flow(
+          response =>
+            `Database find pecEmail by id = '${contract.IDEMAIL}'. Reason: status code = '${response.statusCode}'`,
+          errorMessage => logMessage(context.log.error, errorMessage),
+          errorMessage => new FetchPecEmailError(errorMessage)
+        )
+      )
+    ),
+    TE.chainEitherK(
+      flow(
+        response => response.resource?.DATAEMAIL,
+        NonEmptyString.decode,
+        E.mapLeft(
+          flow(
+            readableReport,
+            errorMessage =>
+              logMessage(context.log.error, `DATAEMAIL: ${errorMessage}`),
+            errorMessage => new ValidationError(errorMessage)
+          )
+        )
+      )
+    ),
+    TE.map(emailDate => ({ ...contract, emailDate }))
+  );
+
+const fetchPecAttachment = (context: Context, dao: Dao) => (
+  contract: EmailDecoratedPecContract
 ): TE.TaskEither<unknown, AttachmentDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
@@ -230,6 +279,7 @@ const saveContract = (context: Context, dao: Dao) => (
               : contract.attachment.NOMEALLEGATO,
             path: contract.attachment.PATHALLEGATO
           },
+          emailDate: contract.emailDate,
           id: contract.id,
           ipaCode: contract.CODICEIPA,
           version: contract.TIPOCONTRATTO
@@ -290,7 +340,8 @@ const HandleSingleDocument = (
         ),
         TE.chain(
           flow(
-            fetchPecAttachment(context, dao),
+            fetchPecEmail(context, dao),
+            TE.chain(fetchPecAttachment(context, dao)),
             TE.chain(saveContract(context, dao))
           )
         )

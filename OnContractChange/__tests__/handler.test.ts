@@ -1,7 +1,7 @@
 import { FeedOptions, FeedResponse, ItemDefinition, ItemResponse, SqlQuerySpec } from "@azure/cosmos";
 import { Context } from "@azure/functions";
 import { Dao, IAttachment } from "../dao";
-import{ FetchMembershipError, FetchPecAttachmentError, FiscalCodeNotFoundError, SaveContractError, UpsertError, ValidationError } from "../error";
+import{ FetchMembershipError, FetchPecAttachmentError, FetchPecEmailError, FiscalCodeNotFoundError, SaveContractError, UpsertError, ValidationError } from "../error";
 import OnContractChangeHandler from "../handler";
 
 import * as TE from "fp-ts/lib/TaskEither";
@@ -54,7 +54,11 @@ describe("OnContractChange", () => {
     CODICEIPA: "CODICEIPA",
     id: "id",
     IDALLEGATO: 1,
+    IDEMAIL: 2,
     TIPOCONTRATTO: "V1.0"
+  };
+  const validPecEmail = {
+    DATAEMAIL: "2021-12-06T17:33:40.000000000+00:00"
   };
   const validPecAttachment = {
     NOMEALLEGATO: "nome",
@@ -180,14 +184,14 @@ describe("OnContractChange", () => {
   });
 
    it.each`
-    fetchAttachmentStatusCode | fetchAttachmentResult                               | errorResultType             | causedBy
-    ${404}                    | ${undefined}                                        | ${FetchPecAttachmentError}  | ${"Database error"}
-    ${200}                    | ${({...validPecAttachment, TIPOALLEGATO: "Altro"})} | ${ValidationError}          | ${"result Validation error"}
+   fetchStatusCode | fetchResult                                          | errorResultType        | causedBy
+    ${404}         | ${undefined}                                         | ${FetchPecEmailError}  | ${"Database error"}
+    ${200}         | ${({...validPecAttachment, TIPOALLEGATO: "Altro"})}  | ${ValidationError}     | ${"result Validation error"}
    `
-   ("should fail to fetch attachments caused by $causedBy", async ({ fetchAttachmentStatusCode, fetchAttachmentResult, errorResultType }) => {
+   ("should fail to fetch email caused by $causedBy", async ({ fetchStatusCode, fetchResult, errorResultType }) => {
     const document = {...validDocument};
     mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
-                    .mockResolvedValueOnce({statusCode: fetchAttachmentStatusCode, resource: fetchAttachmentResult} as ItemResponse<any>);
+                    .mockResolvedValueOnce({statusCode: fetchStatusCode, resource: fetchResult} as ItemResponse<any>);
     
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
     try {
@@ -200,16 +204,47 @@ describe("OnContractChange", () => {
       expect(error).toBeInstanceOf(errorResultType);
     }
     expect(mockDao).toBeCalledTimes(3);
-    expect(mockDao).lastCalledWith("pecAllegato");
+    expect(mockDao).lastCalledWith("pecEmail");
     expect(mockReadItemById).toBeCalledTimes(2);
+    expect(mockReadItemById).lastCalledWith(document.IDEMAIL.toString());
+    expect(mockUpsert).toBeCalledTimes(1);
+  });
+
+   it.each`
+    fetchAttachmentStatusCode | fetchAttachmentResult                               | errorResultType             | causedBy
+    ${404}                    | ${undefined}                                        | ${FetchPecAttachmentError}  | ${"Database error"}
+    ${200}                    | ${({...validPecAttachment, TIPOALLEGATO: "Altro"})} | ${ValidationError}          | ${"result Validation error"}
+   `
+   ("should fail to fetch attachments caused by $causedBy", async ({ fetchAttachmentStatusCode, fetchAttachmentResult, errorResultType }) => {
+    const document = {...validDocument};
+    const mockReadPecEmailByIdResult = { ...validPecEmail };
+    mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
+                    .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
+                    .mockResolvedValueOnce({statusCode: fetchAttachmentStatusCode, resource: fetchAttachmentResult} as ItemResponse<any>);
+    
+    mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
+    try {
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
+        mockContext,
+        document
+      );
+      fail();
+    } catch (error) {
+      expect(error).toBeInstanceOf(errorResultType);
+    }
+    expect(mockDao).toBeCalledTimes(4);
+    expect(mockDao).lastCalledWith("pecAllegato");
+    expect(mockReadItemById).toBeCalledTimes(3);
     expect(mockReadItemById).lastCalledWith(document.IDALLEGATO.toString());
     expect(mockUpsert).toBeCalledTimes(1);
   });
 
    it("should fail to save contract caused by Database error", async () => {
     const document = {...validDocument};
+    const mockReadPecEmailByIdResult = { ...validPecEmail };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment };
     mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
+                    .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
     
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
@@ -221,18 +256,20 @@ describe("OnContractChange", () => {
       );
       fail();
     } catch (error) {
+      console.log(error);
       expect(error).toBeInstanceOf(SaveContractError);
     }
-    expect(mockDao).toBeCalledTimes(4);
+    expect(mockDao).toBeCalledTimes(5);
     expect(mockDao).lastCalledWith("contracts");
-    expect(mockReadItemById).toBeCalledTimes(2);
+    expect(mockReadItemById).toBeCalledTimes(3);
     
     expect(mockUpsert).toBeCalledTimes(2);
     expect(mockUpsert).lastCalledWith({
       id: document.id, 
       ipaCode: document.CODICEIPA.toLowerCase(), 
       fiscalCode: undefined, //mockIpaOpenData.get(document.CODICEIPA.toLowerCase()),
-      version: document.TIPOCONTRATTO, 
+      version: document.TIPOCONTRATTO,
+      emailDate: mockReadPecEmailByIdResult.DATAEMAIL,
       attachment: mapAttachment(mockReadPecAttachmentByIdResult)
     });
   });
@@ -244,8 +281,10 @@ describe("OnContractChange", () => {
    `
    ("should complete without errors: $institutionType", async ({ ipaOpenData }) => {
     const document = {...validDocument};
+    const mockReadPecEmailByIdResult = { ...validPecEmail };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment, NOMEALLEGATONUOVO: "new name" } as any;
     mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
+                    .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
     
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
@@ -258,9 +297,8 @@ describe("OnContractChange", () => {
     } catch (error) {
       fail();
     }
-    expect(mockDao).toBeCalledTimes(4);
-    expect(mockReadItemById).toBeCalledTimes(2);
-  
+    expect(mockDao).toBeCalledTimes(5);
+    expect(mockReadItemById).toBeCalledTimes(3);
     expect(mockUpsert).toBeCalledTimes(2);
     expect(mockUpsert).nthCalledWith(1, {id: document.CODICEIPA.toLowerCase(),
       fiscalCode: ipaOpenData.get(document.CODICEIPA.toLowerCase()),
@@ -270,15 +308,18 @@ describe("OnContractChange", () => {
     expect(mockUpsert).nthCalledWith(2, {
       id: document.id, 
       ipaCode: document.CODICEIPA.toLowerCase(), 
-      version: document.TIPOCONTRATTO, 
+      version: document.TIPOCONTRATTO,
+      emailDate: mockReadPecEmailByIdResult.DATAEMAIL,
       attachment: mapAttachment(mockReadPecAttachmentByIdResult)
     });
   });
    
   it("should complete without errors for an already insert membership", async () => {
     const document = {...validDocument};
+    const mockReadPecEmailByIdResult = { ...validPecEmail };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment };
     mockReadItemById.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
+                    .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
     
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
@@ -291,13 +332,14 @@ describe("OnContractChange", () => {
     } catch (error) {
       fail();
     }
-    expect(mockDao).toBeCalledTimes(3);
-    expect(mockReadItemById).toBeCalledTimes(2);
+    expect(mockDao).toBeCalledTimes(4);
+    expect(mockReadItemById).toBeCalledTimes(3);
     expect(mockUpsert).toBeCalledTimes(1);
     expect(mockUpsert).lastCalledWith({
       id: document.id, 
       ipaCode: document.CODICEIPA.toLowerCase(), 
-      version: document.TIPOCONTRATTO, 
+      version: document.TIPOCONTRATTO,
+      emailDate: mockReadPecEmailByIdResult.DATAEMAIL,
       attachment: mapAttachment(mockReadPecAttachmentByIdResult)
     });
   });
