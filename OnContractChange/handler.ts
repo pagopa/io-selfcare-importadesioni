@@ -9,7 +9,7 @@ import * as E from "fp-ts/lib/Either";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import { IpaOpenData, IpaDataReader } from "./ipa";
-import { Dao } from "./dao";
+import { Dao } from "../models/dao";
 import {
   ValidationError,
   FetchMembershipError,
@@ -18,7 +18,7 @@ import {
   FetchPecAttachmentError,
   SaveContractError,
   FetchPecEmailError
-} from "./error";
+} from "../models/error";
 
 export enum TipoContrattoEnum {
   V1_0 = "V1.0",

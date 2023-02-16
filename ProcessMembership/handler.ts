@@ -3,12 +3,9 @@ import { flow, pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/lib/Either";
 import * as TE from "fp-ts/lib/TaskEither";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
-import {
-  NotImplementedError,
-  ValidationError
-} from "../OnContractChange/error";
+import { NotImplementedError, ValidationError } from "../models/error";
 import { withJsonInput } from "../utils/misc";
-import { Dao } from "../OnContractChange/dao";
+import { Dao } from "../models/dao";
 
 type IpaCode = t.TypeOf<typeof IpaCode>;
 const IpaCode = t.string;

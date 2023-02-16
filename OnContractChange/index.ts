@@ -2,7 +2,7 @@ import { createBlobService } from "azure-storage";
 import { cosmosdb } from "../utils/cosmosdb";
 import { getConfigOrThrow } from "../utils/config";
 import { createIpaDataReader } from "./ipa";
-import { dao } from "./dao";
+import { dao } from "../models/dao";
 import OnContractChangeHandler from "./handler";
 
 const config = getConfigOrThrow();
