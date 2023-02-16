@@ -3,13 +3,12 @@ import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { NonNegativeNumber } from "@pagopa/ts-commons/lib/numbers";
 import { Context } from "@azure/functions";
 import { flow, pipe } from "fp-ts/lib/function";
-import { enumType } from "@pagopa/ts-commons/lib/types";
+
 import * as TE from "fp-ts/lib/TaskEither";
 import * as E from "fp-ts/lib/Either";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
-import { IpaOpenData, IpaDataReader } from "./ipa";
-import { Dao } from "./dao";
+import { Dao } from "../models/dao";
 import {
   ValidationError,
   FetchMembershipError,
@@ -18,40 +17,39 @@ import {
   FetchPecAttachmentError,
   SaveContractError,
   FetchPecEmailError
-} from "./error";
+} from "../models/error";
+import { ContractVersion } from "../models/types";
+import { IpaOpenData, IpaDataReader } from "./ipa";
 
-export enum TipoContrattoEnum {
-  V1_0 = "V1.0",
-  V2_0 = "V2.0",
-  V2_2__06_17 = "V2.2(17 giugno)",
-  V2_2__07_29 = "V2.2(29 luglio)",
-  V2_3 = "V2.3"
-}
-
-const TipoContratto = enumType<TipoContrattoEnum>(
-  TipoContrattoEnum,
-  "TipoContratto"
-);
-type TipoContratto = t.TypeOf<typeof TipoContratto>;
-
+type PecContratto = t.TypeOf<typeof PecContratto>;
 const PecContratto = t.interface({
   CODICEIPA: NonEmptyString,
   IDALLEGATO: NonNegativeNumber,
   IDEMAIL: NonNegativeNumber,
-  TIPOCONTRATTO: TipoContratto,
+  TIPOCONTRATTO: ContractVersion,
   id: NonEmptyString
 });
-
-type PecContratto = t.TypeOf<typeof PecContratto>;
 
 type MembershipDecoratedPecContract = PecContratto & {
   readonly adesioneAlreadyInsert: boolean;
 };
 
-type IpaDecoratedPecContract = PecContratto & {
-  readonly isEnteCentrale: boolean;
-  readonly ipaFiscalCode?: string;
-};
+type IpaDecoratedPecContract = t.TypeOf<typeof IpaDecoratedPecContract>;
+const IpaDecoratedPecContract = t.intersection([
+  PecContratto,
+  t.union([
+    t.intersection([
+      t.type({
+        isEnteCentrale: t.literal(false)
+      }),
+      t.partial({ ipaFiscalCode: NonEmptyString })
+    ]),
+    t.type({
+      ipaFiscalCode: NonEmptyString,
+      isEnteCentrale: t.literal(true)
+    })
+  ])
+]);
 
 const PecAllegato = t.intersection([
   t.interface({
@@ -70,7 +68,7 @@ type AttachmentDecoratedPecContract = EmailDecoratedPecContract & {
 };
 
 type EmailDecoratedPecContract = PecContratto & {
-  readonly emailDate: string;
+  readonly emailDate: NonEmptyString;
 };
 
 const logMessage = (
@@ -116,27 +114,22 @@ const fetchMembership = (context: Context, dao: Dao) => (
 
 const decorateFromIPA = (context: Context, ipaOpenData: IpaOpenData) => (
   contract: PecContratto
-): TE.TaskEither<unknown, IpaDecoratedPecContract> =>
+): E.Either<FiscalCodeNotFoundError, IpaDecoratedPecContract> =>
   pipe(
     {
       ...contract,
       ipaFiscalCode: ipaOpenData.get(contract.CODICEIPA),
       isEnteCentrale: ipaOpenData.has(contract.CODICEIPA)
     },
-    TE.right,
-    TE.chainEitherK(
-      E.fromPredicate(
-        ipaDecoratedContract =>
-          !(
-            ipaDecoratedContract.isEnteCentrale &&
-            !ipaDecoratedContract.ipaFiscalCode
-          ),
-        flow(
-          ipaDecoratedContract =>
-            `Fiscal Code not found in IPA Open Data for IPA code '${ipaDecoratedContract.CODICEIPA}'`,
-          errorMessage => logMessage(context.log.error, errorMessage),
-          errorMessage => new FiscalCodeNotFoundError(errorMessage)
-        )
+    IpaDecoratedPecContract.decode,
+    E.mapLeft(
+      flow(
+        readableReport,
+        msg =>
+          `decorateFromIPA|Invalid contract for CODIPA: ${contract.CODICEIPA}, error: ${msg}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        // validation may fail if, for an "ente centrale", no fiscal code is provided
+        errorMessage => new FiscalCodeNotFoundError(errorMessage)
       )
     )
   );
@@ -152,7 +145,7 @@ const saveMembership = (context: Context, dao: Dao) => (
           id: contract.CODICEIPA,
           ipaCode: contract.CODICEIPA,
           mainInstitution: contract.isEnteCentrale,
-          status: "INITIAL"
+          status: "Initial"
         }),
       flow(
         error =>
@@ -335,6 +328,7 @@ const HandleSingleDocument = (
             : pipe(
                 membershipDecoratedContract,
                 decorateFromIPA(context, ipaOpenData),
+                TE.fromEither,
                 TE.chain(saveMembership(context, dao))
               )
         ),
@@ -363,7 +357,7 @@ const OnContractChangeHandler = (
         Array.isArray(documents) ? documents : [documents],
         RA.filter(document =>
           pipe(
-            TipoContratto.decode(document.TIPOCONTRATTO),
+            ContractVersion.decode(document.TIPOCONTRATTO),
             E.mapLeft(_ =>
               context.log.info(
                 `TIPOCONTRATTO = '${document.TIPOCONTRATTO}' not allowed. Skip item!`

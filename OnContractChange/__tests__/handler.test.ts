@@ -1,7 +1,8 @@
 import { FeedOptions, FeedResponse, ItemDefinition, ItemResponse, SqlQuerySpec } from "@azure/cosmos";
 import { Context } from "@azure/functions";
-import { Dao, IAttachment } from "../dao";
-import{ FetchMembershipError, FetchPecAttachmentError, FetchPecEmailError, FiscalCodeNotFoundError, SaveContractError, UpsertError, ValidationError } from "../error";
+import { Dao } from "../../models/dao";
+import { IAttachment } from "../../models/types";
+import{ FetchMembershipError, FetchPecAttachmentError, FetchPecEmailError, FiscalCodeNotFoundError, SaveContractError, UpsertError, ValidationError } from "../../models/error";
 import OnContractChangeHandler from "../handler";
 
 import * as TE from "fp-ts/lib/TaskEither";
@@ -67,7 +68,7 @@ describe("OnContractChange", () => {
     id: "id",
     NOMEALLEGATONUOVO: undefined
   };
-  const mapAttachment = (pecAttachment: typeof validPecAttachment): IAttachment => ({
+  const mapAttachment = (pecAttachment: typeof validPecAttachment) => ({
     name: pecAttachment.NOMEALLEGATONUOVO ? pecAttachment.NOMEALLEGATONUOVO : pecAttachment.NOMEALLEGATO,
     path: pecAttachment.PATHALLEGATO,
     kind: pecAttachment.TIPOALLEGATO,
@@ -180,7 +181,7 @@ describe("OnContractChange", () => {
       fiscalCode: undefined, //mockIpaOpenData.get(document.CODICEIPA.toLowerCase()),
       ipaCode: document.CODICEIPA.toLowerCase(),
       mainInstitution: false,
-      status: "INITIAL"});
+      status: "Initial"});
   });
 
    it.each`
@@ -256,7 +257,6 @@ describe("OnContractChange", () => {
       );
       fail();
     } catch (error) {
-      console.log(error);
       expect(error).toBeInstanceOf(SaveContractError);
     }
     expect(mockDao).toBeCalledTimes(5);
@@ -304,7 +304,7 @@ describe("OnContractChange", () => {
       fiscalCode: ipaOpenData.get(document.CODICEIPA.toLowerCase()),
       ipaCode: document.CODICEIPA.toLowerCase(),
       mainInstitution: ipaOpenData.has(document.CODICEIPA.toLowerCase()),
-      status: "INITIAL"});
+      status: "Initial"});
     expect(mockUpsert).nthCalledWith(2, {
       id: document.id, 
       ipaCode: document.CODICEIPA.toLowerCase(), 

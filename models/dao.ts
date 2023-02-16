@@ -10,29 +10,8 @@ import {
   PartitionKey,
   SqlQuerySpec
 } from "@azure/cosmos";
+import { IContract, IMembership } from "./types";
 
-export interface IMembership {
-  readonly fiscalCode?: string;
-  readonly id: string;
-  readonly ipaCode: string;
-  readonly mainInstitution: boolean;
-  readonly status: string;
-}
-
-export interface IAttachment {
-  readonly id: string;
-  readonly name: string;
-  readonly path: string;
-  readonly kind: string;
-}
-
-export interface IContract {
-  readonly attachment: IAttachment;
-  readonly emailDate: string;
-  readonly id: string;
-  readonly ipaCode: string;
-  readonly version: string;
-}
 interface IContainerItemMap {
   readonly contracts: IContract;
   readonly memberships: IMembership;
