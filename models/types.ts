@@ -30,7 +30,7 @@ export const IMembership = t.intersection([
     mainInstitution: t.boolean,
     status: t.string
   }),
-  t.partial({ fiscalCode: t.string, note: t.string })
+  t.partial({ fiscalCode: NonEmptyString, note: t.string })
 ]);
 
 export type IAttachment = t.TypeOf<typeof IAttachment>;

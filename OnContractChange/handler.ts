@@ -34,10 +34,22 @@ type MembershipDecoratedPecContract = PecContratto & {
   readonly adesioneAlreadyInsert: boolean;
 };
 
-type IpaDecoratedPecContract = PecContratto & {
-  readonly isEnteCentrale: boolean;
-  readonly ipaFiscalCode?: string;
-};
+type IpaDecoratedPecContract = t.TypeOf<typeof IpaDecoratedPecContract>;
+const IpaDecoratedPecContract = t.intersection([
+  PecContratto,
+  t.union([
+    t.intersection([
+      t.type({
+        isEnteCentrale: t.literal(false)
+      }),
+      t.partial({ ipaFiscalCode: NonEmptyString })
+    ]),
+    t.type({
+      ipaFiscalCode: NonEmptyString,
+      isEnteCentrale: t.literal(true)
+    })
+  ])
+]);
 
 const PecAllegato = t.intersection([
   t.interface({
@@ -102,27 +114,22 @@ const fetchMembership = (context: Context, dao: Dao) => (
 
 const decorateFromIPA = (context: Context, ipaOpenData: IpaOpenData) => (
   contract: PecContratto
-): TE.TaskEither<unknown, IpaDecoratedPecContract> =>
+): E.Either<FiscalCodeNotFoundError, IpaDecoratedPecContract> =>
   pipe(
     {
       ...contract,
       ipaFiscalCode: ipaOpenData.get(contract.CODICEIPA),
       isEnteCentrale: ipaOpenData.has(contract.CODICEIPA)
     },
-    TE.right,
-    TE.chainEitherK(
-      E.fromPredicate(
-        ipaDecoratedContract =>
-          !(
-            ipaDecoratedContract.isEnteCentrale &&
-            !ipaDecoratedContract.ipaFiscalCode
-          ),
-        flow(
-          ipaDecoratedContract =>
-            `Fiscal Code not found in IPA Open Data for IPA code '${ipaDecoratedContract.CODICEIPA}'`,
-          errorMessage => logMessage(context.log.error, errorMessage),
-          errorMessage => new FiscalCodeNotFoundError(errorMessage)
-        )
+    IpaDecoratedPecContract.decode,
+    E.mapLeft(
+      flow(
+        readableReport,
+        msg =>
+          `decorateFromIPA|Invalid contract for CODIPA: ${contract.CODICEIPA}, error: ${msg}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        // validation may fail if, for an "ente centrale", no fiscal code is provided
+        errorMessage => new FiscalCodeNotFoundError(errorMessage)
       )
     )
   );
@@ -321,6 +328,7 @@ const HandleSingleDocument = (
             : pipe(
                 membershipDecoratedContract,
                 decorateFromIPA(context, ipaOpenData),
+                TE.fromEither,
                 TE.chain(saveMembership(context, dao))
               )
         ),
