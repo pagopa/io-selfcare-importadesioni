@@ -68,7 +68,7 @@ type AttachmentDecoratedPecContract = EmailDecoratedPecContract & {
 };
 
 type EmailDecoratedPecContract = PecContratto & {
-  readonly emailDate: string;
+  readonly emailDate: NonEmptyString;
 };
 
 const logMessage = (
@@ -145,7 +145,7 @@ const saveMembership = (context: Context, dao: Dao) => (
           id: contract.CODICEIPA,
           ipaCode: contract.CODICEIPA,
           mainInstitution: contract.isEnteCentrale,
-          status: "INITIAL"
+          status: "Initial"
         }),
       flow(
         error =>

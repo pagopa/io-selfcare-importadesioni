@@ -7,7 +7,7 @@ import {
 import * as t from "io-ts";
 
 export type IpaCode = t.TypeOf<typeof IpaCode>;
-export const IpaCode = t.string;
+export const IpaCode = NonEmptyString;
 
 // The status we consider when processing a Membership
 export type MembershipStatus = t.TypeOf<typeof MembershipStatus>;
@@ -38,10 +38,10 @@ export const TipoDelegato = t.union([
 export type IMembership = t.TypeOf<typeof IMembership>;
 export const IMembership = t.intersection([
   t.type({
-    id: t.string, // same value as ipaCode
+    id: NonEmptyString, // same value as ipaCode
     ipaCode: IpaCode,
     mainInstitution: t.boolean,
-    status: t.string
+    status: MembershipStatus
   }),
   t.partial({ fiscalCode: NonEmptyString, note: t.string })
 ]);
@@ -49,20 +49,20 @@ export const IMembership = t.intersection([
 // An attacpment as is processed by our importer
 export type IAttachment = t.TypeOf<typeof IAttachment>;
 export const IAttachment = t.type({
-  id: t.string,
-  kind: t.string,
-  name: t.string,
-  path: t.string
+  id: NonEmptyString,
+  kind: t.literal("Contratto"),
+  name: NonEmptyString,
+  path: NonEmptyString
 });
 
 // A contract as is processed by our importer
 export type IContract = t.TypeOf<typeof IContract>;
 export const IContract = t.type({
   attachment: IAttachment,
-  emailDate: t.string,
-  id: t.string,
+  emailDate: NonEmptyString,
+  id: NonEmptyString,
   ipaCode: IpaCode,
-  version: t.string
+  version: ContractVersion
 });
 
 // Delegate as we read from source data

@@ -68,7 +68,7 @@ describe("OnContractChange", () => {
     id: "id",
     NOMEALLEGATONUOVO: undefined
   };
-  const mapAttachment = (pecAttachment: typeof validPecAttachment): IAttachment => ({
+  const mapAttachment = (pecAttachment: typeof validPecAttachment) => ({
     name: pecAttachment.NOMEALLEGATONUOVO ? pecAttachment.NOMEALLEGATONUOVO : pecAttachment.NOMEALLEGATO,
     path: pecAttachment.PATHALLEGATO,
     kind: pecAttachment.TIPOALLEGATO,
@@ -181,7 +181,7 @@ describe("OnContractChange", () => {
       fiscalCode: undefined, //mockIpaOpenData.get(document.CODICEIPA.toLowerCase()),
       ipaCode: document.CODICEIPA.toLowerCase(),
       mainInstitution: false,
-      status: "INITIAL"});
+      status: "Initial"});
   });
 
    it.each`
@@ -257,7 +257,6 @@ describe("OnContractChange", () => {
       );
       fail();
     } catch (error) {
-      console.log(error);
       expect(error).toBeInstanceOf(SaveContractError);
     }
     expect(mockDao).toBeCalledTimes(5);
@@ -305,7 +304,7 @@ describe("OnContractChange", () => {
       fiscalCode: ipaOpenData.get(document.CODICEIPA.toLowerCase()),
       ipaCode: document.CODICEIPA.toLowerCase(),
       mainInstitution: ipaOpenData.has(document.CODICEIPA.toLowerCase()),
-      status: "INITIAL"});
+      status: "Initial"});
     expect(mockUpsert).nthCalledWith(2, {
       id: document.id, 
       ipaCode: document.CODICEIPA.toLowerCase(), 
