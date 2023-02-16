@@ -28,6 +28,7 @@ export interface IAttachment {
 
 export interface IContract {
   readonly attachment: IAttachment;
+  readonly emailDate: string;
   readonly id: string;
   readonly ipaCode: string;
   readonly version: string;
@@ -37,6 +38,7 @@ interface IContainerItemMap {
   readonly memberships: IMembership;
   readonly pecDelegato: ItemDefinition;
   readonly pecAllegato: ItemDefinition;
+  readonly pecEmail: ItemDefinition;
 }
 
 const readItemById = <T extends ItemDefinition>(
