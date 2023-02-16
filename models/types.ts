@@ -31,13 +31,28 @@ export const IContract = t.type({
   version: t.string
 });
 
-/* type Delegate = t.TypeOf<typeof Delegate>;
-const Delegate = t.type({
+export type TipoDelegato = t.TypeOf<typeof TipoDelegato>;
+export const TipoDelegato = t.union([
+  t.literal("Principale"),
+  t.literal("Secondario"),
+  t.literal("Altro")
+]);
+
+export type Delegate = t.TypeOf<typeof Delegate>;
+export const Delegate = t.type({
   email: t.string,
   fiscalCode: t.string,
   id: t.string,
-  role: t.string
-}); */
+  role: TipoDelegato
+});
+
+export type IContractWithDelegates = t.TypeOf<typeof IContractWithDelegates>;
+export const IContractWithDelegates = t.intersection([
+  IContract,
+  t.type({
+    delegates: t.readonlyArray(Delegate)
+  })
+]);
 
 export type TipoContratto = t.TypeOf<typeof TipoContratto>;
 export const TipoContratto = t.union([
