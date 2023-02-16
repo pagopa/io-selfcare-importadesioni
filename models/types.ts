@@ -27,3 +27,11 @@ export const IContract = t.type({
   ipaCode: t.string,
   version: t.string
 });
+
+export type TipoContratto = t.TypeOf<typeof TipoContratto>;
+export const TipoContratto = t.union([
+  t.literal("V1.0"),
+  t.literal("V2.0"),
+  t.literal("V2.2(17 giugno)"),
+  t.literal("V2.2(29 luglio)")
+]);

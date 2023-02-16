@@ -3,12 +3,11 @@ import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { NonNegativeNumber } from "@pagopa/ts-commons/lib/numbers";
 import { Context } from "@azure/functions";
 import { flow, pipe } from "fp-ts/lib/function";
-import { enumType } from "@pagopa/ts-commons/lib/types";
+
 import * as TE from "fp-ts/lib/TaskEither";
 import * as E from "fp-ts/lib/Either";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
-import { IpaOpenData, IpaDataReader } from "./ipa";
 import { Dao } from "../models/dao";
 import {
   ValidationError,
@@ -19,21 +18,10 @@ import {
   SaveContractError,
   FetchPecEmailError
 } from "../models/error";
+import { TipoContratto } from "../models/types";
+import { IpaOpenData, IpaDataReader } from "./ipa";
 
-export enum TipoContrattoEnum {
-  V1_0 = "V1.0",
-  V2_0 = "V2.0",
-  V2_2__06_17 = "V2.2(17 giugno)",
-  V2_2__07_29 = "V2.2(29 luglio)",
-  V2_3 = "V2.3"
-}
-
-const TipoContratto = enumType<TipoContrattoEnum>(
-  TipoContrattoEnum,
-  "TipoContratto"
-);
-type TipoContratto = t.TypeOf<typeof TipoContratto>;
-
+type PecContratto = t.TypeOf<typeof PecContratto>;
 const PecContratto = t.interface({
   CODICEIPA: NonEmptyString,
   IDALLEGATO: NonNegativeNumber,
@@ -41,8 +29,6 @@ const PecContratto = t.interface({
   TIPOCONTRATTO: TipoContratto,
   id: NonEmptyString
 });
-
-type PecContratto = t.TypeOf<typeof PecContratto>;
 
 type MembershipDecoratedPecContract = PecContratto & {
   readonly adesioneAlreadyInsert: boolean;
