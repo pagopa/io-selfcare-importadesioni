@@ -1,7 +1,7 @@
 import { FeedOptions, FeedResponse, ItemDefinition, ItemResponse, SqlQuerySpec } from "@azure/cosmos";
 import { Context } from "@azure/functions";
-import { Dao } from "../../OnContractChange/dao";
-import { NotImplementedError, ValidationError } from "../../OnContractChange/error";
+import { Dao } from "../../models/dao";
+import { NotImplementedError, ValidationError } from "../../models/error";
 import createHandler from "../handler";
 
 const mockReadItemById = jest.fn<Promise<ItemResponse<any>>, [itemId: string, partitionKeyValue?: unknown]>();

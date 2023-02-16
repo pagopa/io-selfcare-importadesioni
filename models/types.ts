@@ -16,26 +16,21 @@ export const MembershipStatus = t.union([
   t.literal("Discarded")
 ]);
 
-const Institution = t.union([
-  t.type({
-    fiscalCode: NonEmptyString,
-    ipaCode: IpaCode,
-    mainInstitution: t.literal(true)
-  }),
-  t.intersection([
-    t.type({ ipaCode: IpaCode, mainInstitution: t.literal(false) }),
-    t.partial({ fiscalCode: NonEmptyString })
-  ])
-]);
+export type MainInstitution = t.TypeOf<typeof MainInstitution>;
+export const MainInstitution = t.type({
+  fiscalCode: NonEmptyString,
+  mainInstitution: t.literal(true)
+});
 
 export type IMembership = t.TypeOf<typeof IMembership>;
 export const IMembership = t.intersection([
-  Institution,
   t.type({
     id: t.string, // same value as ipaCode
+    ipaCode: IpaCode,
+    mainInstitution: t.boolean,
     status: t.string
   }),
-  t.partial({ note: t.string })
+  t.partial({ fiscalCode: t.string, note: t.string })
 ]);
 
 export type IAttachment = t.TypeOf<typeof IAttachment>;

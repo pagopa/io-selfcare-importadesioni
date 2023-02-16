@@ -20,6 +20,8 @@ interface IContainerItemMap {
   readonly pecEmail: ItemDefinition;
 }
 
+const x = {} as IMembership;
+x.fiscalCode
 const readItemById = <T extends ItemDefinition>(
   database: Database,
   containerId: string

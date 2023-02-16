@@ -1,7 +1,8 @@
 import { FeedOptions, FeedResponse, ItemDefinition, ItemResponse, SqlQuerySpec } from "@azure/cosmos";
 import { Context } from "@azure/functions";
-import { Dao, IAttachment } from "../dao";
-import{ FetchMembershipError, FetchPecAttachmentError, FetchPecEmailError, FiscalCodeNotFoundError, SaveContractError, UpsertError, ValidationError } from "../error";
+import { Dao } from "../../models/dao";
+import { IAttachment } from "../../models/types";
+import{ FetchMembershipError, FetchPecAttachmentError, FetchPecEmailError, FiscalCodeNotFoundError, SaveContractError, UpsertError, ValidationError } from "../../models/error";
 import OnContractChangeHandler from "../handler";
 
 import * as TE from "fp-ts/lib/TaskEither";
