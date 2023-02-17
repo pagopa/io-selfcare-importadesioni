@@ -18,7 +18,7 @@ import {
   SaveContractError,
   FetchPecEmailError
 } from "../models/error";
-import { ContractVersion } from "../models/types"
+import { ContractVersion } from "../models/types";
 import { IpaOpenData, IpaDataReader } from "./ipa";
 
 type PecContratto = t.TypeOf<typeof PecContratto>;
