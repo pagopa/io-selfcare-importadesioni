@@ -1,86 +1,55 @@
 import * as t from "io-ts";
-import { EmailString, NonEmptyString } from "@pagopa/ts-commons/lib/strings";
+import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { NonNegativeNumber } from "@pagopa/ts-commons/lib/numbers";
 import { Context } from "@azure/functions";
 import { flow, pipe } from "fp-ts/lib/function";
-import { enumType } from "@pagopa/ts-commons/lib/types";
+
 import * as TE from "fp-ts/lib/TaskEither";
 import * as E from "fp-ts/lib/Either";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
-import { IpaOpenData, IpaDataReader } from "./ipa";
-import { Dao, IDelegate } from "./dao";
+import { Dao } from "../models/dao";
 import {
   ValidationError,
   FetchMembershipError,
-  FetchPecDelegatesError,
   FiscalCodeNotFoundError,
   UpsertError,
   FetchPecAttachmentError,
-  SaveContractError
-} from "./error";
+  SaveContractError,
+  FetchPecEmailError
+} from "../models/error";
+import { ContractVersion } from "../models/types"
+import { IpaOpenData, IpaDataReader } from "./ipa";
 
-export enum TipoContrattoEnum {
-  V1_0 = "V1.0",
-  V2_0 = "V2.0",
-  V2_2__06_17 = "V2.2(17 giugno)",
-  V2_2__07_29 = "V2.2(29 luglio)",
-  V2_3 = "V2.3"
-}
-
-const TipoContratto = enumType<TipoContrattoEnum>(
-  TipoContrattoEnum,
-  "TipoContratto"
-);
-type TipoContratto = t.TypeOf<typeof TipoContratto>;
-
+type PecContratto = t.TypeOf<typeof PecContratto>;
 const PecContratto = t.interface({
   CODICEIPA: NonEmptyString,
   IDALLEGATO: NonNegativeNumber,
-  TIPOCONTRATTO: TipoContratto,
+  IDEMAIL: NonNegativeNumber,
+  TIPOCONTRATTO: ContractVersion,
   id: NonEmptyString
 });
-
-type PecContratto = t.TypeOf<typeof PecContratto>;
 
 type MembershipDecoratedPecContract = PecContratto & {
   readonly adesioneAlreadyInsert: boolean;
 };
 
-type IpaDecoratedPecContract = PecContratto & {
-  readonly isEnteCentrale: boolean;
-  readonly ipaFiscalCode?: string;
-};
-
-export enum TipoDelegatoEnum {
-  PRINCIPALE = "Principale",
-  SECONDARIO = "Secondario",
-  ALTRO = "Altro"
-}
-
-const TipoDelegato = enumType<TipoDelegatoEnum>(
-  TipoDelegatoEnum,
-  "TipoDelegato"
-);
-type TipoDelegato = t.TypeOf<typeof TipoDelegato>;
-
-const PecDelegate = t.intersection([
-  t.interface({
-    CODICEFISCALE: NonEmptyString,
-    EMAIL: EmailString,
-    IDALLEGATO: NonNegativeNumber,
-    NOMINATIVO: NonEmptyString,
-    TIPODELEGATO: TipoDelegato,
-    id: NonEmptyString
-  }),
-  t.partial({ QUALIFICA: t.string })
+type IpaDecoratedPecContract = t.TypeOf<typeof IpaDecoratedPecContract>;
+const IpaDecoratedPecContract = t.intersection([
+  PecContratto,
+  t.union([
+    t.intersection([
+      t.type({
+        isEnteCentrale: t.literal(false)
+      }),
+      t.partial({ ipaFiscalCode: NonEmptyString })
+    ]),
+    t.type({
+      ipaFiscalCode: NonEmptyString,
+      isEnteCentrale: t.literal(true)
+    })
+  ])
 ]);
-
-type PecDelegate = t.TypeOf<typeof PecDelegate>;
-
-type DelegatesDecoratedPecContract = PecContratto & {
-  readonly delegates: ReadonlyArray<PecDelegate>;
-};
 
 const PecAllegato = t.intersection([
   t.interface({
@@ -94,8 +63,12 @@ const PecAllegato = t.intersection([
 
 type PecAllegato = t.TypeOf<typeof PecAllegato>;
 
-type AttachmentDecoratedPecContract = DelegatesDecoratedPecContract & {
+type AttachmentDecoratedPecContract = EmailDecoratedPecContract & {
   readonly attachment: PecAllegato;
+};
+
+type EmailDecoratedPecContract = PecContratto & {
+  readonly emailDate: NonEmptyString;
 };
 
 const logMessage = (
@@ -141,27 +114,22 @@ const fetchMembership = (context: Context, dao: Dao) => (
 
 const decorateFromIPA = (context: Context, ipaOpenData: IpaOpenData) => (
   contract: PecContratto
-): TE.TaskEither<unknown, IpaDecoratedPecContract> =>
+): E.Either<FiscalCodeNotFoundError, IpaDecoratedPecContract> =>
   pipe(
     {
       ...contract,
       ipaFiscalCode: ipaOpenData.get(contract.CODICEIPA),
       isEnteCentrale: ipaOpenData.has(contract.CODICEIPA)
     },
-    TE.right,
-    TE.chainEitherK(
-      E.fromPredicate(
-        ipaDecoratedContract =>
-          !(
-            ipaDecoratedContract.isEnteCentrale &&
-            !ipaDecoratedContract.ipaFiscalCode
-          ),
-        flow(
-          ipaDecoratedContract =>
-            `Fiscal Code not found in IPA Open Data for IPA code '${ipaDecoratedContract.CODICEIPA}'`,
-          errorMessage => logMessage(context.log.error, errorMessage),
-          errorMessage => new FiscalCodeNotFoundError(errorMessage)
-        )
+    IpaDecoratedPecContract.decode,
+    E.mapLeft(
+      flow(
+        readableReport,
+        msg =>
+          `decorateFromIPA|Invalid contract for CODIPA: ${contract.CODICEIPA}, error: ${msg}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        // validation may fail if, for an "ente centrale", no fiscal code is provided
+        errorMessage => new FiscalCodeNotFoundError(errorMessage)
       )
     )
   );
@@ -177,7 +145,7 @@ const saveMembership = (context: Context, dao: Dao) => (
           id: contract.CODICEIPA,
           ipaCode: contract.CODICEIPA,
           mainInstitution: contract.isEnteCentrale,
-          status: "INITIAL"
+          status: "Initial"
         }),
       flow(
         error =>
@@ -203,65 +171,51 @@ const saveMembership = (context: Context, dao: Dao) => (
     TE.map(_ => contract)
   );
 
-const fetchPecDelegates = (context: Context, dao: Dao) => (
+const fetchPecEmail = (context: Context, dao: Dao) => (
   contract: PecContratto
-): TE.TaskEither<unknown, DelegatesDecoratedPecContract> =>
+): TE.TaskEither<unknown, EmailDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
-      async () => {
-        // eslint-disable-next-line functional/no-let, functional/prefer-readonly-type
-        let delegates: unknown[] = [];
-        // eslint-disable-next-line functional/no-let
-        let response;
-        do {
-          response = await dao("pecDelegato").readItemsByQuery(
-            {
-              parameters: [{ name: "@idAllegato", value: contract.IDALLEGATO }],
-              query:
-                "SELECT * FROM pecDelegato d WHERE d.IDALLEGATO = @idAllegato"
-            },
-            {
-              continuationToken: response
-                ? response.continuationToken
-                : undefined
-            }
-          );
-          delegates = delegates.concat(response.resources);
-        } while (response.hasMoreResults);
-        return delegates;
-      },
+      () => dao("pecEmail").readItemById(contract.IDEMAIL.toString()),
       flow(
         error =>
-          `Failed to fetch delegates for attachment id = ${
-            contract.IDALLEGATO
-          }. Reason: ${String(error)}`,
+          `Database find pecEmail by id = '${
+            contract.IDEMAIL
+          }'. Reason: ${String(error)}`,
         errorMessage => logMessage(context.log.error, errorMessage),
-        errorMessage => new FetchPecDelegatesError(errorMessage)
+        errorMessage => new FetchPecEmailError(errorMessage)
+      )
+    ),
+    TE.chainEitherK(
+      E.fromPredicate(
+        response => response.statusCode >= 200 && response.statusCode < 300,
+        flow(
+          response =>
+            `Database find pecEmail by id = '${contract.IDEMAIL}'. Reason: status code = '${response.statusCode}'`,
+          errorMessage => logMessage(context.log.error, errorMessage),
+          errorMessage => new FetchPecEmailError(errorMessage)
+        )
       )
     ),
     TE.chainEitherK(
       flow(
-        RA.map(
+        response => response.resource?.DATAEMAIL,
+        NonEmptyString.decode,
+        E.mapLeft(
           flow(
-            PecDelegate.decode,
-            E.mapLeft(
-              flow(
-                readableReport,
-                errorMessage =>
-                  logMessage(context.log.error, `PecDelegate: ${errorMessage}`),
-                errorMessage => new ValidationError(errorMessage)
-              )
-            )
+            readableReport,
+            errorMessage =>
+              logMessage(context.log.error, `DATAEMAIL: ${errorMessage}`),
+            errorMessage => new ValidationError(errorMessage)
           )
-        ),
-        E.sequenceArray // TODO: how to "accumulate" errors?
+        )
       )
     ),
-    TE.map(delegates => ({ ...contract, delegates }))
+    TE.map(emailDate => ({ ...contract, emailDate }))
   );
 
 const fetchPecAttachment = (context: Context, dao: Dao) => (
-  contract: DelegatesDecoratedPecContract
+  contract: EmailDecoratedPecContract
 ): TE.TaskEither<unknown, AttachmentDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
@@ -318,25 +272,7 @@ const saveContract = (context: Context, dao: Dao) => (
               : contract.attachment.NOMEALLEGATO,
             path: contract.attachment.PATHALLEGATO
           },
-          delegates: contract.delegates.map(
-            (delegate): IDelegate => ({
-              attachmentId: delegate.IDALLEGATO,
-              email: delegate.EMAIL,
-              firstName: delegate.NOMINATIVO.slice(
-                0,
-                delegate.NOMINATIVO.indexOf(" ") === -1
-                  ? undefined
-                  : delegate.NOMINATIVO.indexOf(" ")
-              ).trim(),
-              fiscalCode: delegate.CODICEFISCALE,
-              id: delegate.id,
-              kind: delegate.TIPODELEGATO,
-              lastName: delegate.NOMINATIVO.slice(
-                delegate.NOMINATIVO.indexOf(" ") + 1
-              ).trim(),
-              role: delegate.QUALIFICA
-            })
-          ),
+          emailDate: contract.emailDate,
           id: contract.id,
           ipaCode: contract.CODICEIPA,
           version: contract.TIPOCONTRATTO
@@ -392,12 +328,13 @@ const HandleSingleDocument = (
             : pipe(
                 membershipDecoratedContract,
                 decorateFromIPA(context, ipaOpenData),
+                TE.fromEither,
                 TE.chain(saveMembership(context, dao))
               )
         ),
         TE.chain(
           flow(
-            fetchPecDelegates(context, dao),
+            fetchPecEmail(context, dao),
             TE.chain(fetchPecAttachment(context, dao)),
             TE.chain(saveContract(context, dao))
           )
@@ -420,7 +357,7 @@ const OnContractChangeHandler = (
         Array.isArray(documents) ? documents : [documents],
         RA.filter(document =>
           pipe(
-            TipoContratto.decode(document.TIPOCONTRATTO),
+            ContractVersion.decode(document.TIPOCONTRATTO),
             E.mapLeft(_ =>
               context.log.info(
                 `TIPOCONTRATTO = '${document.TIPOCONTRATTO}' not allowed. Skip item!`

@@ -10,45 +10,14 @@ import {
   PartitionKey,
   SqlQuerySpec
 } from "@azure/cosmos";
+import { IContract, IMembership } from "./types";
 
-export interface IMembership {
-  readonly fiscalCode?: string;
-  readonly id: string;
-  readonly ipaCode: string;
-  readonly mainInstitution: boolean;
-  readonly status: string;
-}
-
-export interface IDelegate {
-  readonly email: string;
-  readonly firstName: string;
-  readonly fiscalCode: string;
-  readonly id: string;
-  readonly attachmentId: number;
-  readonly kind: string;
-  readonly lastName: string;
-  readonly role?: string;
-}
-
-export interface IAttachment {
-  readonly id: string;
-  readonly name: string;
-  readonly path: string;
-  readonly kind: string;
-}
-
-export interface IContract {
-  readonly attachment: IAttachment;
-  readonly delegates: ReadonlyArray<IDelegate>;
-  readonly id: string;
-  readonly ipaCode: string;
-  readonly version: string;
-}
 interface IContainerItemMap {
   readonly contracts: IContract;
   readonly memberships: IMembership;
   readonly pecDelegato: ItemDefinition;
   readonly pecAllegato: ItemDefinition;
+  readonly pecEmail: ItemDefinition;
 }
 
 // eslint-disable-next-line functional/prefer-readonly-type
