@@ -14,16 +14,19 @@ import {
   MembershipStatus,
   PecDelegate
 } from "../models/types";
+import { SelfCareClient } from "../utils/selfcare";
+import { NonEmptyString } from "io-ts-types";
 
 type QueueItem = t.TypeOf<typeof QueueItem>;
 const QueueItem = t.type({
+  fiscalCode: NonEmptyString,
   ipaCode: IpaCode
 });
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
-type SelfCareMembershipClaimParams = {
-  // TBD
-};
+type SelfCareMembershipClaimParams = Parameters<
+  SelfCareClient["autoApprovalOnboardingUsingPOST"]
+>;
 
 // retrieve the list of contracts relative to a Membership, identified by its ipa code
 const fetchContractsByIpaCode = (dao: Dao) => (
@@ -79,18 +82,23 @@ const hasManager = ({ delegates }: IContractWithDelegates): boolean =>
 
 // Prepare data to be sent to SelfCare
 const composeSelfCareMembershipClaim = (
-  _ipaCode: IpaCode,
-  _contract: IContract
-): SelfCareMembershipClaimParams => ({});
+  fiscalCode: NonEmptyString,
+  contract: IContractWithDelegates
+): SelfCareMembershipClaimParams => {
+  const formatted: SelfCareMembershipClaimParams = {} //TODO;
+  return formatted;
+};
 
 // Submit the claim to SelfCare to import the memebership
-const submitMembershipClaimToSelfcare = (
-  _selfcareConfig: unknown /* TBD */
-) => (_claim: SelfCareMembershipClaimParams): TE.TaskEither<Error, void> =>
-  TE.left(
-    new NotImplementedError(
-      "submitMembershipClaimToSelfcare() - Not implemented yet"
-    )
+const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
+  claim: SelfCareMembershipClaimParams
+): TE.TaskEither<Error, void> =>
+  pipe(
+    TE.tryCatch(
+      () => selfcareClient.autoApprovalOnboardingUsingPOST(...claim),
+      E.toError
+    ),
+    TE.map(_ => void 0)
   );
 
 // Save that the memebeship is not meant to be processed by the current business logic
@@ -124,9 +132,11 @@ const markMembershipAsCompleted = (dao: Dao) => (
 ): TE.TaskEither<Error, void> => markMembership(dao)(ipaCode, "Processed");
 
 const createHandler = ({
-  dao
+  dao,
+  selfcareClient
 }: {
   readonly dao: Dao;
+  readonly selfcareClient: SelfCareClient;
 }): ReturnType<typeof withJsonInput> =>
   pipe(
     withJsonInput((_context, queueItem) =>

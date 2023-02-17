@@ -9,6 +9,9 @@ tags = {
   CostCenter  = "TS310 - PAGAMENTI & SERVIZI"
 }
 
+## Selfcare
+selfcare_url = "https://io-d-importadesioni-fn.azurewebsites.net/api/v1"
+
 ## Network
 vnet_common_rg = "io-d-rg-common"
 vnet_name      = "io-d-vnet-common"

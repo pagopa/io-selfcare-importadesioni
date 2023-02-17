@@ -36,6 +36,13 @@ variable "tags" {
   }
 }
 
+variable "selfcare_url" {
+  type = string
+  default = {
+    CreatedBy = "Terraform"
+  }
+}
+
 locals {
   project = "${var.prefix}-${var.env_short}"
 }
