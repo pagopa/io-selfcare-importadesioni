@@ -8,6 +8,7 @@ import * as TE from "fp-ts/lib/TaskEither";
 import * as E from "fp-ts/lib/Either";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
+import { withDefault } from "@pagopa/ts-commons/lib/types";
 import { Dao } from "../models/dao";
 import {
   ValidationError,
@@ -21,7 +22,6 @@ import {
 import { ContractVersion } from "../models/types";
 import { IpaOpenData, IpaDataReader } from "./ipa";
 
-type PecContratto = t.TypeOf<typeof PecContratto>;
 const PecContratto = t.interface({
   CODICEIPA: NonEmptyString,
   IDALLEGATO: NonNegativeNumber,
@@ -29,14 +29,18 @@ const PecContratto = t.interface({
   TIPOCONTRATTO: ContractVersion,
   id: NonEmptyString
 });
+type PecContratto = t.TypeOf<typeof PecContratto>;
 
-type MembershipDecoratedPecContract = PecContratto & {
-  readonly adesioneAlreadyInsert: boolean;
-};
+const PecEmail = t.type({
+  COMUNECODICEIPA: withDefault(t.string, ""),
+  DATAEMAIL: NonEmptyString
+});
+type PecEmail = t.TypeOf<typeof PecEmail>;
 
-type IpaDecoratedPecContract = t.TypeOf<typeof IpaDecoratedPecContract>;
-const IpaDecoratedPecContract = t.intersection([
-  PecContratto,
+type EmailDecoratedPecContract = PecContratto & PecEmail;
+
+const IpaRetrievedData = t.intersection([
+  t.type({ ipaCode: NonEmptyString }),
   t.union([
     t.intersection([
       t.type({
@@ -50,9 +54,15 @@ const IpaDecoratedPecContract = t.intersection([
     })
   ])
 ]);
+type IpaDecoratedPecContract = EmailDecoratedPecContract &
+  t.TypeOf<typeof IpaRetrievedData>;
+
+type MembershipDecoratedPecContract = IpaDecoratedPecContract & {
+  readonly adesioneAlreadyInsert: boolean;
+};
 
 const PecAllegato = t.intersection([
-  t.interface({
+  t.type({
     NOMEALLEGATO: NonEmptyString,
     PATHALLEGATO: NonEmptyString,
     TIPOALLEGATO: t.literal("Contratto"),
@@ -60,15 +70,10 @@ const PecAllegato = t.intersection([
   }),
   t.partial({ NOMEALLEGATONUOVO: NonEmptyString })
 ]);
-
 type PecAllegato = t.TypeOf<typeof PecAllegato>;
 
-type AttachmentDecoratedPecContract = EmailDecoratedPecContract & {
+type AttachmentDecoratedPecContract = IpaDecoratedPecContract & {
   readonly attachment: PecAllegato;
-};
-
-type EmailDecoratedPecContract = PecContratto & {
-  readonly emailDate: NonEmptyString;
 };
 
 const logMessage = (
@@ -78,98 +83,6 @@ const logMessage = (
   log(errorMessage);
   return errorMessage;
 };
-
-const fetchMembership = (context: Context, dao: Dao) => (
-  contract: PecContratto
-): TE.TaskEither<unknown, MembershipDecoratedPecContract> =>
-  pipe(
-    TE.tryCatch(
-      () => dao("memberships").readItemById(contract.CODICEIPA),
-      flow(
-        error =>
-          `Database find relationship by id for codiceIPA = '${
-            contract.CODICEIPA
-          }' failed. Reason: ${String(error)}`,
-        errorMessage => logMessage(context.log.error, errorMessage),
-        errorMessage => new FetchMembershipError(errorMessage)
-      )
-    ),
-    TE.map(response => response.statusCode),
-    TE.chainEitherK(
-      E.fromPredicate(
-        statusCode => statusCode === 200 || statusCode === 404,
-        flow(
-          statusCode =>
-            `Database find relationship by id for codiceIPA = '${contract.CODICEIPA}' failed. Reason: status code = '${statusCode}'`,
-          errorMessage => logMessage(context.log.error, errorMessage),
-          errorMessage => new FetchMembershipError(errorMessage)
-        )
-      )
-    ),
-    TE.map(statusCode => ({
-      ...contract,
-      adesioneAlreadyInsert: statusCode === 200
-    }))
-  );
-
-const decorateFromIPA = (context: Context, ipaOpenData: IpaOpenData) => (
-  contract: PecContratto
-): E.Either<FiscalCodeNotFoundError, IpaDecoratedPecContract> =>
-  pipe(
-    {
-      ...contract,
-      ipaFiscalCode: ipaOpenData.get(contract.CODICEIPA),
-      isEnteCentrale: ipaOpenData.has(contract.CODICEIPA)
-    },
-    IpaDecoratedPecContract.decode,
-    E.mapLeft(
-      flow(
-        readableReport,
-        msg =>
-          `decorateFromIPA|Invalid contract for CODIPA: ${contract.CODICEIPA}, error: ${msg}`,
-        errorMessage => logMessage(context.log.error, errorMessage),
-        // validation may fail if, for an "ente centrale", no fiscal code is provided
-        errorMessage => new FiscalCodeNotFoundError(errorMessage)
-      )
-    )
-  );
-
-const saveMembership = (context: Context, dao: Dao) => (
-  contract: IpaDecoratedPecContract
-): TE.TaskEither<unknown, PecContratto> =>
-  pipe(
-    TE.tryCatch(
-      () =>
-        dao("memberships").upsert({
-          fiscalCode: contract.ipaFiscalCode,
-          id: contract.CODICEIPA,
-          ipaCode: contract.CODICEIPA,
-          mainInstitution: contract.isEnteCentrale,
-          status: "Initial"
-        }),
-      flow(
-        error =>
-          `Database upsert relationship for codiceIPA = '${
-            contract.CODICEIPA
-          }' failed. Reason: ${String(error)}`,
-        errorMessage => logMessage(context.log.error, errorMessage),
-        errorMessage => new UpsertError(errorMessage)
-      )
-    ),
-    TE.map(response => response.statusCode),
-    TE.chainEitherK(
-      E.fromPredicate(
-        statusCode => statusCode >= 200 && statusCode < 300,
-        flow(
-          statusCode =>
-            `Database upsert relationship for codiceIPA = '${contract.CODICEIPA}' failed. Reason: status code = '${statusCode}'`,
-          errorMessage => logMessage(context.log.error, errorMessage),
-          errorMessage => new UpsertError(errorMessage)
-        )
-      )
-    ),
-    TE.map(_ => contract)
-  );
 
 const fetchPecEmail = (context: Context, dao: Dao) => (
   contract: PecContratto
@@ -199,23 +112,122 @@ const fetchPecEmail = (context: Context, dao: Dao) => (
     ),
     TE.chainEitherK(
       flow(
-        response => response.resource?.DATAEMAIL,
-        NonEmptyString.decode,
+        response => response.resource,
+        PecEmail.decode,
         E.mapLeft(
           flow(
             readableReport,
             errorMessage =>
-              logMessage(context.log.error, `DATAEMAIL: ${errorMessage}`),
+              logMessage(context.log.error, `PecEmail: ${errorMessage}`),
             errorMessage => new ValidationError(errorMessage)
           )
         )
       )
     ),
-    TE.map(emailDate => ({ ...contract, emailDate }))
+    TE.map(pecEmail => ({ ...contract, ...pecEmail }))
+  );
+
+const decorateFromIPA = (context: Context, ipaOpenData: IpaOpenData) => (
+  contract: EmailDecoratedPecContract
+): E.Either<unknown, IpaDecoratedPecContract> =>
+  pipe(
+    ipaOpenData.has(contract.COMUNECODICEIPA.toLowerCase())
+      ? contract.COMUNECODICEIPA.toLowerCase()
+      : contract.CODICEIPA.toLowerCase(),
+    ipaCode => ({
+      ipaCode,
+      ipaFiscalCode: ipaOpenData.get(ipaCode),
+      isEnteCentrale: ipaOpenData.has(ipaCode)
+    }),
+    IpaRetrievedData.decode,
+    E.mapLeft(
+      flow(
+        readableReport,
+        msg =>
+          `decorateFromIPA|Invalid contract for CODIPA: ${contract.CODICEIPA}, error: ${msg}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        // validation may fail if, for an "ente centrale", no fiscal code is provided
+        errorMessage => new FiscalCodeNotFoundError(errorMessage)
+      )
+    ),
+    E.map(ipaRetrievedData => ({
+      ...contract,
+      ...ipaRetrievedData
+    }))
+  );
+
+const fetchMembership = (context: Context, dao: Dao) => (
+  contract: IpaDecoratedPecContract
+): TE.TaskEither<unknown, MembershipDecoratedPecContract> =>
+  pipe(
+    TE.tryCatch(
+      () => dao("memberships").readItemById(contract.ipaCode),
+      flow(
+        error =>
+          `Database find relationship by id for codiceIPA = '${
+            contract.ipaCode
+          }' failed. Reason: ${String(error)}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        errorMessage => new FetchMembershipError(errorMessage)
+      )
+    ),
+    TE.map(response => response.statusCode),
+    TE.chainEitherK(
+      E.fromPredicate(
+        statusCode => statusCode === 200 || statusCode === 404,
+        flow(
+          statusCode =>
+            `Database find relationship by id for codiceIPA = '${contract.ipaCode}' failed. Reason: status code = '${statusCode}'`,
+          errorMessage => logMessage(context.log.error, errorMessage),
+          errorMessage => new FetchMembershipError(errorMessage)
+        )
+      )
+    ),
+    TE.map(statusCode => ({
+      ...contract,
+      adesioneAlreadyInsert: statusCode === 200
+    }))
+  );
+
+const saveMembership = (context: Context, dao: Dao) => (
+  contract: MembershipDecoratedPecContract
+): TE.TaskEither<unknown, IpaDecoratedPecContract> =>
+  pipe(
+    TE.tryCatch(
+      () =>
+        dao("memberships").upsert({
+          fiscalCode: contract.ipaFiscalCode,
+          id: contract.ipaCode,
+          ipaCode: contract.ipaCode,
+          mainInstitution: contract.isEnteCentrale,
+          status: "Initial"
+        }),
+      flow(
+        error =>
+          `Database upsert relationship for codiceIPA = '${
+            contract.ipaCode
+          }' failed. Reason: ${String(error)}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        errorMessage => new UpsertError(errorMessage)
+      )
+    ),
+    TE.map(response => response.statusCode),
+    TE.chainEitherK(
+      E.fromPredicate(
+        statusCode => statusCode >= 200 && statusCode < 300,
+        flow(
+          statusCode =>
+            `Database upsert relationship for codiceIPA = '${contract.ipaCode}' failed. Reason: status code = '${statusCode}'`,
+          errorMessage => logMessage(context.log.error, errorMessage),
+          errorMessage => new UpsertError(errorMessage)
+        )
+      )
+    ),
+    TE.map(_ => contract)
   );
 
 const fetchPecAttachment = (context: Context, dao: Dao) => (
-  contract: EmailDecoratedPecContract
+  contract: IpaDecoratedPecContract
 ): TE.TaskEither<unknown, AttachmentDecoratedPecContract> =>
   pipe(
     TE.tryCatch(
@@ -272,15 +284,15 @@ const saveContract = (context: Context, dao: Dao) => (
               : contract.attachment.NOMEALLEGATO,
             path: contract.attachment.PATHALLEGATO
           },
-          emailDate: contract.emailDate,
+          emailDate: contract.DATAEMAIL,
           id: contract.id,
-          ipaCode: contract.CODICEIPA,
+          ipaCode: contract.ipaCode,
           version: contract.TIPOCONTRATTO
         }),
       flow(
         error =>
           `Database upsert contracts for codiceIPA = '${
-            contract.CODICEIPA
+            contract.ipaCode
           }' and id = '${contract.id}' failed. Reason: ${String(error)}`,
         errorMessage => logMessage(context.log.error, errorMessage),
         errorMessage => new SaveContractError(errorMessage)
@@ -292,7 +304,7 @@ const saveContract = (context: Context, dao: Dao) => (
         statusCode => statusCode >= 200 && statusCode < 300,
         flow(
           statusCode =>
-            `Database upsert contracts for codiceIPA = '${contract.CODICEIPA}' and id = '${contract.id}' failed. Reason: status code = '${statusCode}'`,
+            `Database upsert contracts for codiceIPA = '${contract.ipaCode}' and id = '${contract.id}' failed. Reason: status code = '${statusCode}'`,
           errorMessage => logMessage(context.log.error, errorMessage),
           errorMessage => new SaveContractError(errorMessage)
         )
@@ -314,28 +326,19 @@ const HandleSingleDocument = (
       errors => new ValidationError(`PecContratto: ${readableReport(errors)}`)
     ),
     TE.fromEither,
-    TE.chain(pecContract =>
-      pipe(
-        {
-          ...pecContract,
-          CODICEIPA: pecContract.CODICEIPA.toLowerCase() as NonEmptyString
-        },
-        x => x,
-        fetchMembership(context, dao),
+    TE.chain(
+      flow(
+        fetchPecEmail(context, dao),
+        TE.chainEitherK(decorateFromIPA(context, ipaOpenData)),
+        TE.chain(fetchMembership(context, dao)),
         TE.chain(membershipDecoratedContract =>
           membershipDecoratedContract.adesioneAlreadyInsert
             ? TE.right(membershipDecoratedContract)
-            : pipe(
-                membershipDecoratedContract,
-                decorateFromIPA(context, ipaOpenData),
-                TE.fromEither,
-                TE.chain(saveMembership(context, dao))
-              )
+            : pipe(membershipDecoratedContract, saveMembership(context, dao))
         ),
         TE.chain(
           flow(
-            fetchPecEmail(context, dao),
-            TE.chain(fetchPecAttachment(context, dao)),
+            fetchPecAttachment(context, dao),
             TE.chain(saveContract(context, dao))
           )
         )
