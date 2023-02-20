@@ -4,7 +4,12 @@ import {
   Client
 } from "../generated/selfcare/client";
 
-export type SelfCareClient = Client<"apiKeyHeader">;
+type Prettify<T> = {
+  [K in keyof T]: T[K];
+  // eslint-disable-next-line @typescript-eslint/ban-types
+} & {};
+
+export type SelfCareClient = Prettify<Client<"apiKeyHeader">>;
 
 export const createClient = (baseUrl: string, apiKey: string): SelfCareClient =>
   createClientBase({

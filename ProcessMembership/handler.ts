@@ -3,7 +3,8 @@ import { flow, pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/lib/Either";
 import * as TE from "fp-ts/lib/TaskEither";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
-import { NotImplementedError, ValidationError } from "../models/error";
+import { NonEmptyString } from "io-ts-types";
+import { ValidationError } from "../models/error";
 import { withJsonInput } from "../utils/misc";
 import { Dao } from "../models/dao";
 import {
@@ -15,7 +16,8 @@ import {
   PecDelegate
 } from "../models/types";
 import { SelfCareClient } from "../utils/selfcare";
-import { NonEmptyString } from "io-ts-types";
+import { RoleEnum, UserDto } from "../generated/selfcare/UserDto";
+import { ImportContractDto } from "../generated/selfcare/ImportContractDto";
 
 type QueueItem = t.TypeOf<typeof QueueItem>;
 const QueueItem = t.type({
@@ -25,8 +27,8 @@ const QueueItem = t.type({
 
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 type SelfCareMembershipClaimParams = Parameters<
-  SelfCareClient["autoApprovalOnboardingUsingPOST"]
->;
+  SelfCareClient["contractOnboardingUsingPOST"]
+>[0];
 
 // retrieve the list of contracts relative to a Membership, identified by its ipa code
 const fetchContractsByIpaCode = (dao: Dao) => (
@@ -80,14 +82,60 @@ const retrieveDelegates = (dao: Dao) => (
 const hasManager = ({ delegates }: IContractWithDelegates): boolean =>
   delegates.some(d => d.TIPODELEGATO === "Principale");
 
+const formatDelegateNameAndSurname = ({
+  NOMINATIVO,
+  CODICEFISCALE
+}: PecDelegate): {
+  readonly name: string;
+  readonly surname: string;
+} => {
+  // if NOMINATIVO is given, we consider the first word as birth name and the rest as surname
+  if (NOMINATIVO) {
+    const [name, ...rest] = NOMINATIVO.split(" ").filter(Boolean);
+    return { name, surname: rest.join(" ") };
+  }
+  // otherwise, we extract the first two triplets of characters from the fiscal code
+  // respectively for surname and name
+  else {
+    const name = CODICEFISCALE.substring(3, 6);
+    const surname = CODICEFISCALE.substring(0, 3);
+    return { name, surname };
+  }
+};
+const toSelfcareRole = (role: PecDelegate["TIPODELEGATO"]): UserDto["role"] => {
+  if (role === "Principale") {
+    return RoleEnum.MANAGER;
+  }
+  // Any other parsed role, we assign the DELEGATE role
+  else {
+    return RoleEnum.DELEGATE;
+  }
+};
+
+const composeSelfcareUser = (input: PecDelegate): UserDto => ({
+  email: input.EMAIL,
+  role: toSelfcareRole(input.TIPODELEGATO),
+  taxCode: input.CODICEFISCALE,
+  ...formatDelegateNameAndSurname(input)
+});
+
+const composeSelfcareContract = (input: IContract): ImportContractDto => ({
+  contractType: input.version,
+  fileName: input.attachment.name,
+  filePath: input.attachment.path
+});
+
 // Prepare data to be sent to SelfCare
 const composeSelfCareMembershipClaim = (
   fiscalCode: NonEmptyString,
   contract: IContractWithDelegates
-): SelfCareMembershipClaimParams => {
-  const formatted: SelfCareMembershipClaimParams = {} //TODO;
-  return formatted;
-};
+): SelfCareMembershipClaimParams => ({
+  body: {
+    importContract: composeSelfcareContract(contract),
+    users: contract.delegates.map(composeSelfcareUser)
+  },
+  externalInstitutionId: fiscalCode
+});
 
 // Submit the claim to SelfCare to import the memebership
 const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
@@ -95,7 +143,7 @@ const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
 ): TE.TaskEither<Error, void> =>
   pipe(
     TE.tryCatch(
-      () => selfcareClient.autoApprovalOnboardingUsingPOST(...claim),
+      () => selfcareClient.contractOnboardingUsingPOST(claim),
       E.toError
     ),
     TE.map(_ => void 0)
@@ -146,29 +194,28 @@ const createHandler = ({
           queueItem,
           QueueItem.decode,
           E.mapLeft(flow(readableReport, _ => new ValidationError(_))),
-          TE.fromEither,
-          TE.map(_ => _.ipaCode)
+          TE.fromEither
         ),
 
         // fetch all contracts
         // and filter only valid ones
-        TE.chain(ipaCode =>
+        TE.chain(item =>
           pipe(
-            ipaCode,
+            item.ipaCode,
             fetchContractsByIpaCode(dao),
             TE.map(selectContract),
             TE.chain(retrieveDelegates(dao)),
-            TE.map(contract => ({ contract, ipaCode }))
+            TE.map(contract => ({ contract, ...item }))
           )
         ),
 
         // process membership with its contracts
-        TE.chain(({ contract, ipaCode }) =>
+        TE.chain(({ contract, ipaCode, fiscalCode }) =>
           hasManager(contract)
             ? // only memberships with a manager can be imported
               pipe(
-                composeSelfCareMembershipClaim(ipaCode, contract),
-                submitMembershipClaimToSelfcare({}),
+                composeSelfCareMembershipClaim(fiscalCode, contract),
+                submitMembershipClaimToSelfcare(selfcareClient),
                 TE.chain(_ => markMembershipAsCompleted(dao)(ipaCode))
               )
             : // otherwise, we mark the memebership as discarded for future data refinements
