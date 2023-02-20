@@ -1,18 +1,6 @@
-import {
-  FeedOptions,
-  FeedResponse,
-  ItemDefinition,
-  ItemResponse,
-  SqlQuerySpec
-} from "@azure/cosmos";
 import { Context } from "@azure/functions";
-import {
-  dao,
-  mockFeedResponse,
-  mockReadAllItemsByQuery,
-  mockUpsert
-} from "../../__mocks__/dao";
-import { NotImplementedError, ValidationError } from "../../models/error";
+import { dao } from "../../__mocks__/dao";
+import { ValidationError } from "../../models/error";
 import createHandler from "../handler";
 import {
   ContractVersion,
@@ -20,6 +8,7 @@ import {
   IContract,
   PecDelegate
 } from "../../models/types";
+import { selfcareClient } from "../../__mocks__/selfcare";
 import * as E from "fp-ts/lib/Either";
 import { pipe } from "fp-ts/lib/function";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
@@ -46,7 +35,7 @@ const anAttachment = pipe(
   })
 );
 const aContractVersion: ContractVersion = "V2.2(29 luglio)";
-const aContract: IContract = pipe(
+const _aContract: IContract = pipe(
   {
     attachment: anAttachment,
     emailDate: "string",
@@ -61,7 +50,7 @@ const aContract: IContract = pipe(
   })
 );
 
-const aDelegate = pipe(
+const _aDelegate = pipe(
   {
     CODICEFISCALE: "AAAAAA00A00A000A",
     EMAIL: "email@example.com",
@@ -86,7 +75,7 @@ describe("ProcessMembership", () => {
     scenario            | payload
     ${"a plain string"} | ${"ipaCode"}
   `("should fail on invalid payloads: $scenario", async ({ payload }) => {
-    const handler = createHandler({ dao });
+    const handler = createHandler({ dao, selfcareClient });
 
     try {
       const _result = await handler(mockContext, payload);
