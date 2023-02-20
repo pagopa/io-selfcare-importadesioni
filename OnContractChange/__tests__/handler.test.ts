@@ -61,7 +61,8 @@ describe("OnContractChange", () => {
     TIPOCONTRATTO: "V1.0"
   };
   const validPecEmail = {
-    DATAEMAIL: "2021-12-06T17:33:40.000000000+00:00"
+    DATAEMAIL: "2021-12-06T17:33:40.000000000+00:00",
+    COMUNECODICEIPA: "COMUNECODICEIPA"
   };
   const validPecAttachment = {
     NOMEALLEGATO: "nome",
@@ -120,10 +121,56 @@ describe("OnContractChange", () => {
     expect(mockDao).toBeCalledTimes(0);
   });
 
+  it.each`
+  fetchStatusCode | fetchResult                                          | errorResultType        | causedBy
+   ${404}         | ${undefined}                                         | ${FetchPecEmailError}  | ${"Database error"}
+   ${200}         | ${({...validPecEmail, DATAEMAIL: undefined})}        | ${ValidationError}     | ${"result Validation error"}
+  `
+  ("should fail to fetch email caused by $causedBy", async ({ fetchStatusCode, fetchResult, errorResultType }) => {
+   const document = {...validDocument};
+   mockReadItemById.mockResolvedValueOnce({statusCode: fetchStatusCode, resource: fetchResult} as ItemResponse<any>);
+   try {
+     await OnContractChangeHandler(mockDao, mockIpaAnyData)(
+       mockContext,
+       document
+     );
+     fail();
+   } catch (error) {
+     expect(error).toBeInstanceOf(errorResultType);
+   }
+   expect(mockDao).toBeCalledTimes(1);
+   expect(mockDao).lastCalledWith("pecEmail");
+   expect(mockReadItemById).toBeCalledTimes(1);
+   expect(mockReadItemById).lastCalledWith(document.IDEMAIL.toString());
+   expect(mockUpsert).toBeCalledTimes(0);
+ });
+
+ it("should fail fetch fiscal code from IPA", async () => {
+  const document = {...validDocument};
+  const mockReadItemByIdResult = {statusCode: 404} as ItemResponse<any>;
+  mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: { ...validPecEmail }} as ItemResponse<any>)
+                  .mockResolvedValueOnce(mockReadItemByIdResult);
+  // force to return an undefined fiscal code to test robustness
+  const mockReadIpaData = TE.right(new Map([[document.CODICEIPA.toLowerCase(), undefined as any]]));
+  try {
+    await OnContractChangeHandler(mockDao, mockReadIpaData)(
+      mockContext,
+      document
+    );
+    fail();
+  } catch (error) {
+    expect(error).toBeInstanceOf(FiscalCodeNotFoundError);
+  }
+  expect(mockDao).toBeCalledTimes(1);
+  expect(mockReadItemById).toBeCalledTimes(1);
+  expect(mockUpsert).toBeCalledTimes(0);
+});
+
   it("should fails on fetching membership", async () => {
     const document = {...validDocument};
     const mockReadItemByIdResult = {statusCode: 500} as ItemResponse<any>;
-    mockReadItemById.mockResolvedValueOnce(mockReadItemByIdResult);
+    mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: { ...validPecEmail }} as ItemResponse<any>)
+                    .mockResolvedValueOnce(mockReadItemByIdResult);
     try {
       await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
@@ -133,85 +180,36 @@ describe("OnContractChange", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(FetchMembershipError);
     }
-    expect(mockDao).toBeCalledTimes(1);
+    expect(mockDao).toBeCalledTimes(2);
     expect(mockDao).toBeCalledWith("memberships");
-    expect(mockReadItemById).toBeCalledTimes(1);
+    expect(mockReadItemById).toBeCalledTimes(2);
     expect(mockReadItemById).toBeCalledWith(document.CODICEIPA.toLowerCase());
     expect(mockUpsert).toBeCalledTimes(0);
   });
 
-   it("should fail fetch fiscal code from IPA", async () => {
-    const document = {...validDocument};
-    const mockReadItemByIdResult = {statusCode: 404} as ItemResponse<any>;
-    mockReadItemById.mockResolvedValueOnce(mockReadItemByIdResult);
-    // force to return an undefined fiscal code to test robustness
-    const mockReadIpaData = TE.right(new Map([[document.CODICEIPA.toLowerCase(), undefined as any]]));
-    try {
-      await OnContractChangeHandler(mockDao, mockReadIpaData)(
-        mockContext,
-        document
-      );
-      fail();
-    } catch (error) {
-      expect(error).toBeInstanceOf(FiscalCodeNotFoundError);
-    }
-    expect(mockDao).toBeCalledTimes(1);
-    expect(mockDao).toBeCalledWith("memberships");
-    expect(mockReadItemById).toBeCalledTimes(1);
-    expect(mockUpsert).toBeCalledTimes(0);
-  });
-
-   it("should fail to save a not 'Main Institution' membership", async () => {
-    const document = {...validDocument};
-    mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>);
-    
-    mockUpsert.mockResolvedValueOnce({statusCode: 500} as ItemResponse<any>);
-    try {
-      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
-        mockContext,
-        document
-      );
-      fail();
-    } catch (error) {
-      expect(error).toBeInstanceOf(UpsertError);
-    }
-    expect(mockDao).toBeCalledTimes(2);
-    expect(mockDao).toBeCalledWith("memberships");
-    expect(mockReadItemById).toBeCalledTimes(1);
-    expect(mockUpsert).toBeCalledTimes(1);
-    expect(mockUpsert).toBeCalledWith({id: document.CODICEIPA.toLowerCase(),
-      fiscalCode: undefined, //mockIpaOpenData.get(document.CODICEIPA.toLowerCase()),
-      ipaCode: document.CODICEIPA.toLowerCase(),
-      mainInstitution: false,
-      status: "Initial"});
-  });
-
-   it.each`
-   fetchStatusCode | fetchResult                                          | errorResultType        | causedBy
-    ${404}         | ${undefined}                                         | ${FetchPecEmailError}  | ${"Database error"}
-    ${200}         | ${({...validPecAttachment, TIPOALLEGATO: "Altro"})}  | ${ValidationError}     | ${"result Validation error"}
-   `
-   ("should fail to fetch email caused by $causedBy", async ({ fetchStatusCode, fetchResult, errorResultType }) => {
-    const document = {...validDocument};
-    mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
-                    .mockResolvedValueOnce({statusCode: fetchStatusCode, resource: fetchResult} as ItemResponse<any>);
-    
-    mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
-    try {
-      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
-        mockContext,
-        document
-      );
-      fail();
-    } catch (error) {
-      expect(error).toBeInstanceOf(errorResultType);
-    }
-    expect(mockDao).toBeCalledTimes(3);
-    expect(mockDao).lastCalledWith("pecEmail");
-    expect(mockReadItemById).toBeCalledTimes(2);
-    expect(mockReadItemById).lastCalledWith(document.IDEMAIL.toString());
-    expect(mockUpsert).toBeCalledTimes(1);
-  });
+  it("should fail to save a not 'Main Institution' membership", async () => {
+  const document = {...validDocument};
+  mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: { ...validPecEmail }} as ItemResponse<any>)
+                  .mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>);
+  mockUpsert.mockResolvedValueOnce({statusCode: 500} as ItemResponse<any>);
+  try {
+    await OnContractChangeHandler(mockDao, mockIpaAnyData)(
+      mockContext,
+      document
+    );
+    fail();
+  } catch (error) {
+    expect(error).toBeInstanceOf(UpsertError);
+  }
+  expect(mockDao).toBeCalledTimes(3);
+  expect(mockReadItemById).toBeCalledTimes(2);
+  expect(mockUpsert).toBeCalledTimes(1);
+  expect(mockUpsert).toBeCalledWith({id: document.CODICEIPA.toLowerCase(),
+    fiscalCode: undefined, //mockIpaOpenData.get(document.CODICEIPA.toLowerCase()),
+    ipaCode: document.CODICEIPA.toLowerCase(),
+    mainInstitution: false,
+    status: "Initial"});
+});
 
    it.each`
     fetchAttachmentStatusCode | fetchAttachmentResult                               | errorResultType             | causedBy
@@ -220,9 +218,8 @@ describe("OnContractChange", () => {
    `
    ("should fail to fetch attachments caused by $causedBy", async ({ fetchAttachmentStatusCode, fetchAttachmentResult, errorResultType }) => {
     const document = {...validDocument};
-    const mockReadPecEmailByIdResult = { ...validPecEmail };
-    mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
-                    .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
+    mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: { ...validPecEmail }} as ItemResponse<any>)
+                    .mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: fetchAttachmentStatusCode, resource: fetchAttachmentResult} as ItemResponse<any>);
     
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
@@ -246,8 +243,8 @@ describe("OnContractChange", () => {
     const document = {...validDocument};
     const mockReadPecEmailByIdResult = { ...validPecEmail };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment };
-    mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
-                    .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
+    mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
+                    .mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
     
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
@@ -285,8 +282,8 @@ describe("OnContractChange", () => {
     const document = {...validDocument};
     const mockReadPecEmailByIdResult = { ...validPecEmail };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment, NOMEALLEGATONUOVO: "new name" } as any;
-    mockReadItemById.mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
-                    .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
+    mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
+                    .mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
     
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
@@ -320,14 +317,16 @@ describe("OnContractChange", () => {
     const document = {...validDocument};
     const mockReadPecEmailByIdResult = { ...validPecEmail };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment };
-    mockReadItemById.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
-                    .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
+    const mockedFiscalCode = "CF";
+    const mockIpaData = TE.right(new Map<string, string>([[mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase(), mockedFiscalCode], [document.CODICEIPA.toLowerCase(), "undefined"]]));
+    mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
+                    .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
     
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
               .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
     try {
-      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
+      await OnContractChangeHandler(mockDao, mockIpaData)(
         mockContext,
         document
       );
@@ -336,10 +335,11 @@ describe("OnContractChange", () => {
     }
     expect(mockDao).toBeCalledTimes(4);
     expect(mockReadItemById).toBeCalledTimes(3);
+    expect(mockReadItemById).nthCalledWith(2, mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase());
     expect(mockUpsert).toBeCalledTimes(1);
     expect(mockUpsert).lastCalledWith({
       id: document.id, 
-      ipaCode: document.CODICEIPA.toLowerCase(), 
+      ipaCode: mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase(), 
       version: document.TIPOCONTRATTO,
       emailDate: mockReadPecEmailByIdResult.DATAEMAIL,
       attachment: mapAttachment(mockReadPecAttachmentByIdResult)
