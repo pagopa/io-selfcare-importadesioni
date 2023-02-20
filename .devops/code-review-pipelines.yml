@@ -55,6 +55,10 @@ stages:
         - template: templates/node-job-setup/template.yaml@pagopaCommons
 
         - script: |
+            yarn generate
+          displayName: 'Generate models'
+
+        - script: |
             yarn test:coverage
           displayName: 'Unit tests exec'
 
