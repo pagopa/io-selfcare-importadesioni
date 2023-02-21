@@ -6,6 +6,7 @@ import { flow, pipe } from "fp-ts/lib/function";
 
 import * as TE from "fp-ts/lib/TaskEither";
 import * as E from "fp-ts/lib/Either";
+import * as O from "fp-ts/lib/Option";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import { withDefault } from "@pagopa/ts-commons/lib/types";
@@ -20,7 +21,7 @@ import {
   FetchPecEmailError
 } from "../models/error";
 import { ContractVersion } from "../models/types";
-import { IpaOpenData, IpaDataReader } from "./ipa";
+import { IIpaOpenData, IpaDataReader } from "./ipa";
 
 const PecContratto = t.interface({
   CODICEIPA: NonEmptyString,
@@ -127,17 +128,35 @@ const fetchPecEmail = (context: Context, dao: Dao) => (
     TE.map(pecEmail => ({ ...contract, ...pecEmail }))
   );
 
-const decorateFromIPA = (context: Context, ipaOpenData: IpaOpenData) => (
+const decorateFromIPA = (context: Context, ipaOpenData: IIpaOpenData) => (
   contract: EmailDecoratedPecContract
 ): E.Either<unknown, IpaDecoratedPecContract> =>
   pipe(
-    ipaOpenData.has(contract.COMUNECODICEIPA.toLowerCase())
-      ? contract.COMUNECODICEIPA.toLowerCase()
-      : contract.CODICEIPA.toLowerCase(),
+    contract.COMUNECODICEIPA.toLowerCase(),
+    O.fromPredicate(ipaOpenData.hasMunicipalLandCode),
+    O.fold(
+      () =>
+        pipe(
+          contract.CODICEIPA.toLowerCase(),
+          O.fromPredicate(ipaOpenData.hasMunicipalLandCode),
+          O.fold(
+            () =>
+              pipe(
+                contract.COMUNECODICEIPA.toLowerCase(),
+                O.fromPredicate(ipaOpenData.hasIpaCode),
+                O.fold(() => undefined, t.identity)
+              ),
+            ipaOpenData.getIpaCode
+          )
+        ),
+      ipaOpenData.getIpaCode
+    ),
+    O.fromNullable,
+    O.getOrElse(() => contract.CODICEIPA.toLowerCase()),
     ipaCode => ({
       ipaCode,
-      ipaFiscalCode: ipaOpenData.get(ipaCode),
-      isEnteCentrale: ipaOpenData.has(ipaCode)
+      ipaFiscalCode: ipaOpenData.getFiscalCode(ipaCode),
+      isEnteCentrale: ipaOpenData.hasIpaCode(ipaCode)
     }),
     IpaRetrievedData.decode,
     E.mapLeft(
@@ -316,7 +335,7 @@ const saveContract = (context: Context, dao: Dao) => (
 const HandleSingleDocument = (
   context: Context,
   dao: Dao,
-  ipaOpenData: IpaOpenData
+  ipaOpenData: IIpaOpenData
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 ) => (document: unknown) =>
   pipe(

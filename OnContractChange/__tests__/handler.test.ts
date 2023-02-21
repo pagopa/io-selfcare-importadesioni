@@ -6,6 +6,8 @@ import{ FetchMembershipError, FetchPecAttachmentError, FetchPecEmailError, Fisca
 import OnContractChangeHandler from "../handler";
 
 import * as TE from "fp-ts/lib/TaskEither";
+import { IIpaOpenData } from "../ipa";
+import { pipe } from "fp-ts/lib/function";
 
 const mockContext = ({
   log: {
@@ -31,7 +33,12 @@ const mockDao = jest.fn<ReturnType<Dao>, Parameters<Dao>>(_ => ({
 
 
 const mockIpaDefaultError = TE.left(new Error("mockReadIpaData not initialized"))
-const mockIpaAnyData = TE.right(new Map())
+const mockIpaAnyData = TE.right({
+  getFiscalCode: (_) => undefined,
+  getIpaCode: (_) => undefined,
+  hasIpaCode: (_) => false,
+  hasMunicipalLandCode: (_) => false
+} as IIpaOpenData)
 
 
 
@@ -151,7 +158,15 @@ describe("OnContractChange", () => {
   mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: { ...validPecEmail }} as ItemResponse<any>)
                   .mockResolvedValueOnce(mockReadItemByIdResult);
   // force to return an undefined fiscal code to test robustness
-  const mockReadIpaData = TE.right(new Map([[document.CODICEIPA.toLowerCase(), undefined as any]]));
+  const mockIpaCode2FiscalCode = new Map([[document.CODICEIPA.toLowerCase(), undefined as any]]);
+  const mockReadIpaData = pipe(
+    mockIpaAnyData,
+    TE.map(mockIpaAnyData => ({
+      ...mockIpaAnyData,
+      getFiscalCode: mockIpaCode2FiscalCode.get.bind(mockIpaCode2FiscalCode),
+      hasIpaCode: mockIpaCode2FiscalCode.has.bind(mockIpaCode2FiscalCode)
+    }))
+  );
   try {
     await OnContractChangeHandler(mockDao, mockReadIpaData)(
       mockContext,
@@ -274,11 +289,11 @@ describe("OnContractChange", () => {
   });
 
    it.each`
-    ipaOpenData                                             | institutionType
+    mockIpaCode2FiscalCode                                  | institutionType
     ${new Map()}                                            | ${"not a 'Main Institution'"}
     ${new Map([[validDocument.CODICEIPA, "fiscal code"]])}  | ${"'Main Institution'"}
    `
-   ("should complete without errors: $institutionType", async ({ ipaOpenData }) => {
+   ("should complete without errors: $institutionType", async ({ mockIpaCode2FiscalCode }) => {
     const document = {...validDocument};
     const mockReadPecEmailByIdResult = { ...validPecEmail };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment, NOMEALLEGATONUOVO: "new name" } as any;
@@ -288,8 +303,16 @@ describe("OnContractChange", () => {
     
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
               .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
+    const mockIpaData = pipe(
+      mockIpaAnyData,
+      TE.map(mockIpaAnyData => ({
+        ...mockIpaAnyData,
+        getFiscalCode: mockIpaCode2FiscalCode.get.bind(mockIpaCode2FiscalCode),
+        hasIpaCode: mockIpaCode2FiscalCode.has.bind(mockIpaCode2FiscalCode)
+      }))
+    );
     try {
-      await OnContractChangeHandler(mockDao, TE.right(ipaOpenData))(
+      await OnContractChangeHandler(mockDao, mockIpaData)(
         mockContext,
         document
       );
@@ -300,9 +323,9 @@ describe("OnContractChange", () => {
     expect(mockReadItemById).toBeCalledTimes(3);
     expect(mockUpsert).toBeCalledTimes(2);
     expect(mockUpsert).nthCalledWith(1, {id: document.CODICEIPA.toLowerCase(),
-      fiscalCode: ipaOpenData.get(document.CODICEIPA.toLowerCase()),
+      fiscalCode: mockIpaCode2FiscalCode.get(document.CODICEIPA.toLowerCase()),
       ipaCode: document.CODICEIPA.toLowerCase(),
-      mainInstitution: ipaOpenData.has(document.CODICEIPA.toLowerCase()),
+      mainInstitution: mockIpaCode2FiscalCode.has(document.CODICEIPA.toLowerCase()),
       status: "Initial"});
     expect(mockUpsert).nthCalledWith(2, {
       id: document.id, 
@@ -318,7 +341,15 @@ describe("OnContractChange", () => {
     const mockReadPecEmailByIdResult = { ...validPecEmail };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment };
     const mockedFiscalCode = "CF";
-    const mockIpaData = TE.right(new Map<string, string>([[mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase(), mockedFiscalCode], [document.CODICEIPA.toLowerCase(), "undefined"]]));
+    const mockIpaCode2FiscalCode = new Map<string, string>([[mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase(), mockedFiscalCode], [document.CODICEIPA.toLowerCase(), "undefined"]]);
+    const mockIpaData = pipe(
+      mockIpaAnyData,
+      TE.map(mockIpaAnyData => ({
+        ...mockIpaAnyData,
+        getFiscalCode: mockIpaCode2FiscalCode.get.bind(mockIpaCode2FiscalCode),
+        hasIpaCode: mockIpaCode2FiscalCode.has.bind(mockIpaCode2FiscalCode)
+      }))
+    );
     mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);

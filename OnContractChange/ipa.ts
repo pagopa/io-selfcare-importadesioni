@@ -9,31 +9,48 @@ import * as E from "fp-ts/lib/Either";
 
 export type IpaCode = string;
 export type FiscalCode = string;
+export type MunicipalLandCode = string;
 /**
- * A map representing organizations retrieved from IPA, with the IPA code as the key and the corresponding tax code as the value.
+ * An object representing organizations data retrieved from IPA
  */
-export type IpaOpenData = ReadonlyMap<IpaCode, FiscalCode>;
+export interface IIpaOpenData {
+  readonly getFiscalCode: (key: IpaCode) => FiscalCode | undefined;
+  readonly getIpaCode: (key: MunicipalLandCode) => IpaCode | undefined;
+  readonly hasIpaCode: (key: IpaCode) => boolean;
+  readonly hasMunicipalLandCode: (key: MunicipalLandCode) => boolean;
+}
 
 /**
- * Read data from a {@link string} and transform its content into an {@link IpaOpenData} instance
+ * Read data from a {@link string} and transform its content into an {@link IIpaOpenData} instance
  *
  * @param stream a row string of IPA Open Data (CSV formatted)
- * @returns an {@link IpaOpenData} instance
+ * @returns an {@link IIpaOpenData} instance
  */
-export const parseIpaData = async (data: string): Promise<IpaOpenData> => {
+export const parseIpaData = async (data: string): Promise<IIpaOpenData> => {
   const ipaCode2FiscalCode = new Map<string, string>();
+  const municipalLandCode2ipaCode = new Map<string, string>();
   const records: ReadonlyArray<ReadonlyArray<string>> = parse(data, {
     from_line: 2
   });
-  records.forEach(row => ipaCode2FiscalCode.set(row[1].toLowerCase(), row[3]));
-  return ipaCode2FiscalCode;
+  records.forEach(row => {
+    ipaCode2FiscalCode.set(row[1].toLowerCase(), row[3]);
+    municipalLandCode2ipaCode.set(row[16].toLowerCase(), row[1].toLowerCase());
+  });
+  return {
+    getFiscalCode: ipaCode2FiscalCode.get.bind(ipaCode2FiscalCode),
+    getIpaCode: municipalLandCode2ipaCode.get.bind(municipalLandCode2ipaCode),
+    hasIpaCode: ipaCode2FiscalCode.has.bind(ipaCode2FiscalCode),
+    hasMunicipalLandCode: municipalLandCode2ipaCode.has.bind(
+      municipalLandCode2ipaCode
+    )
+  };
 };
 
 /**
- * Read data from a {@link stream} and transform its content into an {@link IpaOpenData} instance
+ * Read data from a {@link stream} and transform its content into an {@link IIpaOpenData} instance
  *
  * @param stream a stream reader of IPA Open Data (CSV formatted)
- * @returns an {@link IpaOpenData} instance
+ * @returns an {@link IIpaOpenData} instance
  */
 export const createIpaDataReader = (
   ...[blobService, containerName, blobName, options]: Parameters<
@@ -69,4 +86,4 @@ export const createIpaDataReader = (
     )
   );
 
-export type IpaDataReader = TE.TaskEither<Error, IpaOpenData>;
+export type IpaDataReader = TE.TaskEither<Error, IIpaOpenData>;
