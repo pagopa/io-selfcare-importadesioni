@@ -12,6 +12,7 @@ import { pipe } from "fp-ts/lib/function";
 
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
+import { UrlFromString } from "@pagopa/ts-commons/lib/url";
 
 // global app configuration
 export type IConfig = t.TypeOf<typeof IConfig>;
@@ -26,6 +27,9 @@ export const IConfig = t.interface({
   INTERNAL_STORAGE_CONNECTION_STRING: NonEmptyString,
 
   IPA_OPEN_DATA_STORAGE_PATH: NonEmptyString,
+
+  SELFCARE_KEY: NonEmptyString,
+  SELFCARE_URL: UrlFromString,
 
   isProduction: t.boolean
 });

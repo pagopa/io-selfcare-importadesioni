@@ -36,6 +36,10 @@ variable "tags" {
   }
 }
 
+variable "selfcare_url" {
+  type = string
+}
+
 locals {
   project = "${var.prefix}-${var.env_short}"
 }
