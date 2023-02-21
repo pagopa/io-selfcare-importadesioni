@@ -289,13 +289,17 @@ describe("OnContractChange", () => {
   });
 
    it.each`
-    mockIpaCode2FiscalCode                                  | institutionType
-    ${new Map()}                                            | ${"not a 'Main Institution'"}
-    ${new Map([[validDocument.CODICEIPA, "fiscal code"]])}  | ${"'Main Institution'"}
+    codiceIpa                   | comuneCodiceIpa                  | ipaCode2FiscalCode                                                 | municipalLandCode2ipaCode                                     | testCase
+    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map()}                                                       | ${new Map()}                                                  | ${"not a 'Main Institution'"}
+    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map([[validDocument.CODICEIPA.toLowerCase(), "CF"]])}        | ${new Map()}                                                  | ${"'Main Institution' IPA code from 'CODICEIPA'"}
+    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map([[validDocument.CODICEIPA.toLowerCase(), "CF"],
+                                                                                [validPecEmail.COMUNECODICEIPA.toLowerCase(), "CF"]])}  | ${new Map()}                                                  | ${"'Main Institution' IPA code from 'COMUNECODICEIPA'"}
+    ${"MLC"}                    | ${validPecEmail.COMUNECODICEIPA} | ${new Map([[validDocument.CODICEIPA.toLowerCase(), "CF"]])}        | ${new Map([["mlc", validDocument.CODICEIPA.toLowerCase()]])}  | ${"'Main Institution' IPA code from 'CODICEIPA' (MLC)"}
+    ${validDocument.CODICEIPA}  | ${"MLC"}                         | ${new Map([[validDocument.CODICEIPA.toLowerCase(), "CF"]])}        | ${new Map([["mlc", validDocument.CODICEIPA.toLowerCase()]])}  | ${"'Main Institution' IPA code from 'COMUNECODICEIPA' (MLC)"}
    `
-   ("should complete without errors: $institutionType", async ({ mockIpaCode2FiscalCode }) => {
-    const document = {...validDocument};
-    const mockReadPecEmailByIdResult = { ...validPecEmail };
+   ("should complete without errors: $testCase", async ({ codiceIpa, comuneCodiceIpa, ipaCode2FiscalCode, municipalLandCode2ipaCode }) => {
+    const document = {...validDocument, CODICEIPA: codiceIpa};
+    const mockReadPecEmailByIdResult = { ...validPecEmail, COMUNECODICEIPA: comuneCodiceIpa };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment, NOMEALLEGATONUOVO: "new name" } as any;
     mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
@@ -303,14 +307,12 @@ describe("OnContractChange", () => {
     
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
               .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
-    const mockIpaData = pipe(
-      mockIpaAnyData,
-      TE.map(mockIpaAnyData => ({
-        ...mockIpaAnyData,
-        getFiscalCode: mockIpaCode2FiscalCode.get.bind(mockIpaCode2FiscalCode),
-        hasIpaCode: mockIpaCode2FiscalCode.has.bind(mockIpaCode2FiscalCode)
-      }))
-    );
+    const mockIpaData = TE.right({
+      getFiscalCode: ipaCode2FiscalCode.get.bind(ipaCode2FiscalCode),
+      hasIpaCode: ipaCode2FiscalCode.has.bind(ipaCode2FiscalCode),
+      hasMunicipalLandCode: municipalLandCode2ipaCode.has.bind(municipalLandCode2ipaCode),
+      getIpaCode: municipalLandCode2ipaCode.get.bind(municipalLandCode2ipaCode),
+    });
     try {
       await OnContractChangeHandler(mockDao, mockIpaData)(
         mockContext,
@@ -322,14 +324,26 @@ describe("OnContractChange", () => {
     expect(mockDao).toBeCalledTimes(5);
     expect(mockReadItemById).toBeCalledTimes(3);
     expect(mockUpsert).toBeCalledTimes(2);
-    expect(mockUpsert).nthCalledWith(1, {id: document.CODICEIPA.toLowerCase(),
-      fiscalCode: mockIpaCode2FiscalCode.get(document.CODICEIPA.toLowerCase()),
-      ipaCode: document.CODICEIPA.toLowerCase(),
-      mainInstitution: mockIpaCode2FiscalCode.has(document.CODICEIPA.toLowerCase()),
+    console.log(`COMUNECODICEIPA = ${mockReadPecEmailByIdResult.COMUNECODICEIPA}`);
+    console.log(`CODICEIPA = ${document.CODICEIPA}`);
+    console.log("ipaCode2FiscalCode = ", ipaCode2FiscalCode);
+    console.log("municipalLandCode2ipaCode = ", municipalLandCode2ipaCode);
+    const ipaCode = municipalLandCode2ipaCode.has(mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase())
+      ? municipalLandCode2ipaCode.get(mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase())
+      : municipalLandCode2ipaCode.has(document.CODICEIPA.toLowerCase()) 
+        ? municipalLandCode2ipaCode.get(document.CODICEIPA.toLowerCase())
+        : ipaCode2FiscalCode.has(mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase())
+          ? mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase()
+          : document.CODICEIPA.toLowerCase();
+    console.log("ipaCode = ", ipaCode);
+    expect(mockUpsert).nthCalledWith(1, {id: ipaCode,
+      fiscalCode: ipaCode2FiscalCode.has(ipaCode) ? "CF" : undefined,
+      ipaCode: ipaCode,
+      mainInstitution: ipaCode2FiscalCode.has(ipaCode),
       status: "Initial"});
     expect(mockUpsert).nthCalledWith(2, {
       id: document.id, 
-      ipaCode: document.CODICEIPA.toLowerCase(), 
+      ipaCode: ipaCode, 
       version: document.TIPOCONTRATTO,
       emailDate: mockReadPecEmailByIdResult.DATAEMAIL,
       attachment: mapAttachment(mockReadPecAttachmentByIdResult)
