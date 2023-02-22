@@ -33,6 +33,8 @@ const composeQuery = (
   limit: number,
   status: MembershipStatus
 ): SqlQuerySpec => {
+  const baseSql =
+    "SELECT * FROM contracts d WHERE d.status = @status and d.mainInstitution = true";
   // when a list of IpaCodes is provides, we retrieve all of them
   if (ipas.length) {
     return {
@@ -40,8 +42,7 @@ const composeQuery = (
         { name: "@ipas", value: ipas },
         { name: "@status", value: status }
       ],
-      query:
-        "SELECT * FROM contracts d WHERE d.status = @status  d.ipaCode IN @ipaCode"
+      query: `${baseSql} and d.ipaCode IN @ipaCode`
     };
   }
   // otherwise we fetch the first elements on the selected status
@@ -51,8 +52,7 @@ const composeQuery = (
         { name: "@limit", value: limit },
         { name: "@status", value: status }
       ],
-      query:
-        "SELECT * FROM contracts d WHERE d.status = @status OFFSET 0 LIMIT @limit"
+      query: `${baseSql} and OFFSET 0 LIMIT @limit`
     };
   }
 };
