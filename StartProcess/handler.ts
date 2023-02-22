@@ -10,6 +10,8 @@ import {
   ResponseSuccessAccepted
 } from "@pagopa/ts-commons/lib/responses";
 
+import { CommaSeparatedListOf } from "@pagopa/ts-commons/lib/comma-separated-list";
+
 import { flow, pipe } from "fp-ts/lib/function";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import * as TE from "fp-ts/lib/TaskEither";
@@ -88,7 +90,7 @@ export function StartProcess({
     //   use this parameter to select a specic set of memberships to process
     RequiredQueryParamMiddleware(
       "ipas",
-      withDefault(t.readonlyArray(IpaCode), [])
+      withDefault(CommaSeparatedListOf(IpaCode), [])
     ),
     // limit the number of membership processed
     //   applied only if ipas is not defined
