@@ -20,6 +20,9 @@ interface IContainerItemMap {
   readonly pecEmail: ItemDefinition;
 }
 
+// eslint-disable-next-line functional/prefer-readonly-type
+const flatten = <T>(arr: T[][]): T[] => arr.reduce((p, e) => [...p, ...e], []);
+
 const readItemById = <T extends ItemDefinition>(
   database: Database,
   containerId: string
@@ -61,6 +64,29 @@ const readItemsByQuery = (database: Database, containerId: string) => (
     .items.query<unknown>(query, options)
     .fetchAll();
 
+const readAllItemsByQuery = (database: Database, containerId: string) => async (
+  query: string | SqlQuerySpec,
+  options?: FeedOptions | undefined
+): Promise<FeedResponse<unknown>> => {
+  const client = readItemsByQuery(database, containerId);
+  // eslint-disable-next-line functional/no-let, functional/prefer-readonly-type
+  const pages: unknown[][] = [];
+  // eslint-disable-next-line functional/no-let
+  let continuationToken: string | undefined;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const response = await client(query, { ...options, continuationToken });
+    // eslint-disable-next-line functional/immutable-data
+    pages.push(response.resources);
+    continuationToken = response.continuationToken;
+    if (!response.hasMoreResults) {
+      break;
+    }
+  }
+
+  return new FeedResponse(flatten(pages), {}, false);
+};
+
 const upsert = <T extends ItemDefinition>(
   database: Database,
   containerId: string
@@ -71,6 +97,7 @@ const upsert = <T extends ItemDefinition>(
 export const dao = (database: Database) => <T extends keyof IContainerItemMap>(
   containerId: T
 ) => ({
+  readAllItemsByQuery: readAllItemsByQuery(database, containerId),
   readItemById: readItemById(database, containerId),
   readItemsByQuery: readItemsByQuery(database, containerId),
   upsert: upsert<IContainerItemMap[T]>(database, containerId)

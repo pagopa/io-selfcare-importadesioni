@@ -1,57 +1,87 @@
-import { FeedOptions, FeedResponse, ItemDefinition, ItemResponse, SqlQuerySpec } from "@azure/cosmos";
 import { Context } from "@azure/functions";
-import { Dao } from "../../models/dao";
-import { NotImplementedError, ValidationError } from "../../models/error";
+import { dao } from "../../__mocks__/dao";
+import { ValidationError } from "../../models/error";
 import createHandler from "../handler";
-
-const mockReadItemById = jest.fn<Promise<ItemResponse<any>>, [itemId: string, partitionKeyValue?: unknown]>();
-
-const mockReadItemsByQuery = jest.fn<Promise<FeedResponse<unknown>>, [query: string | SqlQuerySpec, options?: FeedOptions | undefined]>();
-
-const mockUpsert = jest.fn<Promise<ItemResponse<ItemDefinition>>, [item: unknown]>();
-
-const mockDao = jest.fn<ReturnType<Dao>, Parameters<Dao>>(_ => ({
-  readItemById: mockReadItemById,
-  readItemsByQuery: mockReadItemsByQuery,
-  upsert: mockUpsert
-}));
+import {
+  ContractVersion,
+  IAttachment,
+  IContract,
+  PecDelegate
+} from "../../models/types";
+import { selfcareClient } from "../../__mocks__/selfcare";
+import * as E from "fp-ts/lib/Either";
+import { pipe } from "fp-ts/lib/function";
+import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 
 const mockContext = ({
   bindings: {
-    log: console,
+    log: console
   }
 } as unknown) as Context;
 
-
 const aValidPayload = { ipaCode: "any string" };
+
+const anAttachment = pipe(
+  {
+    kind: "Contratto",
+    id: "string",
+    name: "string",
+    path: "string"
+  },
+  IAttachment.decode,
+  E.mapLeft(readableReport),
+  E.getOrElseW(err => {
+    throw err;
+  })
+);
+const aContractVersion: ContractVersion = "V2.2(29 luglio)";
+const _aContract: IContract = pipe(
+  {
+    attachment: anAttachment,
+    emailDate: "string",
+    id: "string",
+    ipaCode: "string",
+    version: aContractVersion
+  },
+  IContract.decode,
+  E.mapLeft(readableReport),
+  E.getOrElseW(err => {
+    throw err;
+  })
+);
+
+const _aDelegate = pipe(
+  {
+    CODICEFISCALE: "AAAAAA00A00A000A",
+    EMAIL: "email@example.com",
+    IDALLEGATO: 20,
+    NOMINATIVO: "mario rossi",
+    TIPODELEGATO: "Altro",
+    id: "string"
+  },
+  PecDelegate.decode,
+  E.mapLeft(readableReport),
+  E.getOrElseW(err => {
+    throw err;
+  })
+);
+
+beforeEach(() => {
+  jest.resetAllMocks();
+});
+
 describe("ProcessMembership", () => {
   it.each`
-    scenario | payload
-    ${"a serialized object"}    | ${JSON.stringify(aValidPayload)}
-    ${"an object"}              | ${aValidPayload}
-  `("should accept valid payload: $scenario", async ({ payload }) => {
-    const handler = createHandler({dao: mockDao});
-
-    // we expect the handler to fail as the implementation is not completed
-    try {
-       const _result = await handler(mockContext, payload) 
-       fail()
-    } catch (error) {
-       expect(error).toEqual(expect.any(NotImplementedError))
-    }
-  });
-
-  it.each`
-    scenario | payload
-    ${"a plain string"}              | ${"ipaCode"}
+    scenario            | payload
+    ${"a plain string"} | ${"ipaCode"}
   `("should fail on invalid payloads: $scenario", async ({ payload }) => {
-    const handler = createHandler({dao: mockDao});
+    const handler = createHandler({ dao, selfcareClient });
 
     try {
-       const _result = await handler(mockContext, payload) 
-       fail()
+      const _result = await handler(mockContext, payload);
+      fail();
     } catch (error) {
-      expect(error).toEqual(expect.any(ValidationError))
+      expect(error).toEqual(expect.any(ValidationError));
     }
   });
 });

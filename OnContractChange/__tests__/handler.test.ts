@@ -23,6 +23,7 @@ const mockReadItemsByQuery = jest.fn<Promise<FeedResponse<unknown>>, [query: str
 const mockUpsert = jest.fn<Promise<ItemResponse<ItemDefinition>>, [item: unknown]>();
 
 const mockDao = jest.fn<ReturnType<Dao>, Parameters<Dao>>(_ => ({
+  readAllItemsByQuery: jest.fn(),
   readItemById: mockReadItemById,
   readItemsByQuery: mockReadItemsByQuery,
   upsert: mockUpsert
@@ -40,6 +41,7 @@ beforeEach(() => {
   mockReadItemsByQuery.mockRejectedValue(new Error("mockReadItemsByQuery not initialized"))
   mockUpsert.mockRejectedValue(new Error("mockUpsert not initialized"))
   mockDao.mockImplementation(_ => ({
+    readAllItemsByQuery: jest.fn() /* not used here */,
     readItemById: mockReadItemById,
     readItemsByQuery: mockReadItemsByQuery,
     upsert: mockUpsert

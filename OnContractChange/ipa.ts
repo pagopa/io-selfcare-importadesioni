@@ -25,7 +25,7 @@ export const parseIpaData = async (data: string): Promise<IpaOpenData> => {
   const records: ReadonlyArray<ReadonlyArray<string>> = parse(data, {
     from_line: 2
   });
-  records.forEach(row => ipaCode2FiscalCode.set(row[1], row[3]));
+  records.forEach(row => ipaCode2FiscalCode.set(row[1].toLowerCase(), row[3]));
   return ipaCode2FiscalCode;
 };
 
