@@ -3,7 +3,7 @@ import { flow, pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/lib/Either";
 import * as TE from "fp-ts/lib/TaskEither";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
-import { NonEmptyString } from "io-ts-types";
+import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { ValidationError } from "../models/error";
 import { withJsonInput } from "../utils/misc";
 import { Dao } from "../models/dao";
@@ -19,8 +19,8 @@ import { SelfCareClient } from "../utils/selfcare";
 import { RoleEnum, UserDto } from "../generated/selfcare/UserDto";
 import { ImportContractDto } from "../generated/selfcare/ImportContractDto";
 
-type QueueItem = t.TypeOf<typeof QueueItem>;
-const QueueItem = t.type({
+export type QueueItem = t.TypeOf<typeof QueueItem>;
+export const QueueItem = t.type({
   fiscalCode: NonEmptyString,
   ipaCode: IpaCode
 });
