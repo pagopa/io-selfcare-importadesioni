@@ -1,0 +1,27 @@
+{
+  "bindings": [
+    {
+      "authLevel": "anonymous",
+      "type": "httpTrigger",
+      "direction": "in",
+      "name": "req",
+      "route": "api/v1/start",
+      "methods": [
+        "post"
+      ]
+    },
+    {
+      "queueName": "process-membership",
+      "connection": "INTERNAL_STORAGE_CONNECTION_STRING",
+      "name": "processMembership",
+      "type": "queue",
+      "direction": "out"
+    },
+    {
+      "type": "http",
+      "direction": "out",
+      "name": "res"
+    }
+  ],
+  "scriptFile": "../dist/StartProcess/index.js"
+}
