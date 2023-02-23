@@ -178,6 +178,12 @@ const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
       () => selfcareClient.contractOnboardingUsingPOST(claim),
       E.toError
     ),
+    TE.chain(flow(TE.fromEither, TE.mapLeft(E.toError))),
+    TE.chain(_ =>
+      _.status === 201
+        ? TE.right(_)
+        : TE.left(new Error(`Selfcare responded ${_.status}`))
+    ),
     TE.map(_ => void 0)
   );
 
