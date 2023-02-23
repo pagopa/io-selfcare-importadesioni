@@ -20,10 +20,16 @@ export interface IIpaOpenData {
   readonly hasMunicipalLandCode: (key: MunicipalLandCode) => boolean;
 }
 
+enum Columns {
+  Codice_IPA = 1,
+  Codice_fiscale_ente = 3,
+  Codice_catastale_comune = 16
+}
+
 /**
  * Read data from a {@link string} and transform its content into an {@link IIpaOpenData} instance
  *
- * @param stream a row string of IPA Open Data (CSV formatted)
+ * @param data a row string of IPA Open Data (CSV formatted)
  * @returns an {@link IIpaOpenData} instance
  */
 export const parseIpaData = async (data: string): Promise<IIpaOpenData> => {
@@ -33,8 +39,14 @@ export const parseIpaData = async (data: string): Promise<IIpaOpenData> => {
     from_line: 2
   });
   records.forEach(row => {
-    ipaCode2FiscalCode.set(row[1].toLowerCase(), row[3]);
-    municipalLandCode2ipaCode.set(row[16].toLowerCase(), row[1].toLowerCase());
+    ipaCode2FiscalCode.set(
+      row[Columns.Codice_IPA].toLowerCase(),
+      row[Columns.Codice_fiscale_ente]
+    );
+    municipalLandCode2ipaCode.set(
+      row[Columns.Codice_catastale_comune].toLowerCase(),
+      row[Columns.Codice_IPA].toLowerCase()
+    );
   });
   return {
     getFiscalCode: ipaCode2FiscalCode.get.bind(ipaCode2FiscalCode),
