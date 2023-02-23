@@ -24,6 +24,7 @@ import { withDefault } from "@pagopa/ts-commons/lib/types";
 import { SqlQuerySpec } from "@azure/cosmos";
 import { Context } from "@azure/functions";
 import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
+import { NumberFromString } from "@pagopa/ts-commons/lib/numbers";
 import { IMembership, IpaCode, MembershipStatus } from "../models/types";
 import { Dao } from "../models/dao";
 import { QueueItem } from "../ProcessMembership/handler";
@@ -34,7 +35,7 @@ const composeQuery = (
   status: MembershipStatus
 ): SqlQuerySpec => {
   const baseSql =
-    "SELECT * FROM contracts d WHERE d.status = @status and d.mainInstitution = true";
+    "SELECT * FROM memberships d WHERE d.status = @status and d.mainInstitution = true";
   // when a list of IpaCodes is provides, we retrieve all of them
   if (ipas.length) {
     return {
@@ -52,7 +53,7 @@ const composeQuery = (
         { name: "@limit", value: limit },
         { name: "@status", value: status }
       ],
-      query: `${baseSql} and OFFSET 0 LIMIT @limit`
+      query: `${baseSql} OFFSET 0 LIMIT @limit`
     };
   }
 };
@@ -94,7 +95,7 @@ export function StartProcess({
     ),
     // limit the number of membership processed
     //   applied only if ipas is not defined
-    RequiredQueryParamMiddleware("limit", withDefault(t.number, 100)),
+    RequiredQueryParamMiddleware("limit", withDefault(NumberFromString, 100)),
     // the processing status of the memebership we query
     //  applied both whe querying by ipa codes or with limit
     RequiredQueryParamMiddleware(
@@ -108,7 +109,7 @@ export function StartProcess({
         composeQuery(ipas, limit, status),
         query =>
           TE.tryCatch(
-            () => dao("memberships").readAllItemsByQuery(query),
+            async () => dao("memberships").readAllItemsByQuery(query),
             _ =>
               ResponseErrorInternal(
                 `Failed to query database, error: ${E.toError(_).message}`
