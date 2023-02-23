@@ -1,7 +1,6 @@
 import { FeedOptions, FeedResponse, ItemDefinition, ItemResponse, SqlQuerySpec } from "@azure/cosmos";
 import { Context } from "@azure/functions";
 import { Dao } from "../../models/dao";
-import { IAttachment } from "../../models/types";
 import{ FetchMembershipError, FetchPecAttachmentError, FetchPecEmailError, FiscalCodeNotFoundError, SaveContractError, UpsertError, ValidationError } from "../../models/error";
 import OnContractChangeHandler from "../handler";
 
@@ -289,15 +288,14 @@ describe("OnContractChange", () => {
   });
 
    it.each`
-    codiceIpa                   | comuneCodiceIpa                  | ipaCode2FiscalCode                                                 | municipalLandCode2ipaCode                                     | testCase
-    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map()}                                                       | ${new Map()}                                                  | ${"not a 'Main Institution'"}
-    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map([[validDocument.CODICEIPA.toLowerCase(), "CF"]])}        | ${new Map()}                                                  | ${"'Main Institution' IPA code from 'CODICEIPA'"}
-    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map([[validDocument.CODICEIPA.toLowerCase(), "CF"],
-                                                                                [validPecEmail.COMUNECODICEIPA.toLowerCase(), "CF"]])}  | ${new Map()}                                                  | ${"'Main Institution' IPA code from 'COMUNECODICEIPA'"}
-    ${"MLC"}                    | ${validPecEmail.COMUNECODICEIPA} | ${new Map([[validDocument.CODICEIPA.toLowerCase(), "CF"]])}        | ${new Map([["mlc", validDocument.CODICEIPA.toLowerCase()]])}  | ${"'Main Institution' IPA code from 'CODICEIPA' (MLC)"}
-    ${validDocument.CODICEIPA}  | ${"MLC"}                         | ${new Map([[validDocument.CODICEIPA.toLowerCase(), "CF"]])}        | ${new Map([["mlc", validDocument.CODICEIPA.toLowerCase()]])}  | ${"'Main Institution' IPA code from 'COMUNECODICEIPA' (MLC)"}
+    codiceIpa                   | comuneCodiceIpa                  | ipaCode2FiscalCode                                                 | municipalLandCode2ipaCode         | expectedIpaCode                                 | expectedFiscalCode  | testCase
+    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map()}                                                       | ${new Map()}                      | ${validDocument.CODICEIPA.toLowerCase()}        | ${undefined}        | ${"not a 'Main Institution'"}
+    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map([[validDocument.CODICEIPA.toLowerCase(), "CF"]])}        | ${new Map()}                      | ${validDocument.CODICEIPA.toLowerCase()}        | ${"CF"}             | ${"'Main Institution' IPA code from 'CODICEIPA'"}
+    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map([[validPecEmail.COMUNECODICEIPA.toLowerCase(), "CF"]])}  | ${new Map()}                      | ${validPecEmail.COMUNECODICEIPA.toLowerCase()}  | ${"CF"}             | ${"'Main Institution' IPA code from 'COMUNECODICEIPA'"}
+    ${"MLC"}                    | ${validPecEmail.COMUNECODICEIPA} | ${new Map([["ipaCode", "CF"]])}                                    | ${new Map([["mlc", "ipaCode"]])}  | ${"ipaCode"}                                    | ${"CF"}             | ${"'Main Institution' IPA code from 'CODICEIPA' (MLC)"}
+    ${validDocument.CODICEIPA}  | ${"MLC"}                         | ${new Map([["ipaCode", "CF"]])}                                    | ${new Map([["mlc", "ipaCode"]])}  | ${"ipaCode"}                                    | ${"CF"}             | ${"'Main Institution' IPA code from 'COMUNECODICEIPA' (MLC)"}
    `
-   ("should complete without errors: $testCase", async ({ codiceIpa, comuneCodiceIpa, ipaCode2FiscalCode, municipalLandCode2ipaCode }) => {
+   ("should complete without errors: $testCase", async ({ codiceIpa, comuneCodiceIpa, ipaCode2FiscalCode, municipalLandCode2ipaCode, expectedIpaCode, expectedFiscalCode }) => {
     const document = {...validDocument, CODICEIPA: codiceIpa};
     const mockReadPecEmailByIdResult = { ...validPecEmail, COMUNECODICEIPA: comuneCodiceIpa };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment, NOMEALLEGATONUOVO: "new name" } as any;
@@ -324,26 +322,14 @@ describe("OnContractChange", () => {
     expect(mockDao).toBeCalledTimes(5);
     expect(mockReadItemById).toBeCalledTimes(3);
     expect(mockUpsert).toBeCalledTimes(2);
-    console.log(`COMUNECODICEIPA = ${mockReadPecEmailByIdResult.COMUNECODICEIPA}`);
-    console.log(`CODICEIPA = ${document.CODICEIPA}`);
-    console.log("ipaCode2FiscalCode = ", ipaCode2FiscalCode);
-    console.log("municipalLandCode2ipaCode = ", municipalLandCode2ipaCode);
-    const ipaCode = municipalLandCode2ipaCode.has(mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase())
-      ? municipalLandCode2ipaCode.get(mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase())
-      : municipalLandCode2ipaCode.has(document.CODICEIPA.toLowerCase()) 
-        ? municipalLandCode2ipaCode.get(document.CODICEIPA.toLowerCase())
-        : ipaCode2FiscalCode.has(mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase())
-          ? mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase()
-          : document.CODICEIPA.toLowerCase();
-    console.log("ipaCode = ", ipaCode);
-    expect(mockUpsert).nthCalledWith(1, {id: ipaCode,
-      fiscalCode: ipaCode2FiscalCode.has(ipaCode) ? "CF" : undefined,
-      ipaCode: ipaCode,
-      mainInstitution: ipaCode2FiscalCode.has(ipaCode),
+    expect(mockUpsert).nthCalledWith(1, {id: expectedIpaCode,
+      fiscalCode: expectedFiscalCode,
+      ipaCode: expectedIpaCode,
+      mainInstitution: ipaCode2FiscalCode.has(expectedIpaCode),
       status: "Initial"});
     expect(mockUpsert).nthCalledWith(2, {
       id: document.id, 
-      ipaCode: ipaCode, 
+      ipaCode: expectedIpaCode, 
       version: document.TIPOCONTRATTO,
       emailDate: mockReadPecEmailByIdResult.DATAEMAIL,
       attachment: mapAttachment(mockReadPecAttachmentByIdResult)
@@ -354,16 +340,6 @@ describe("OnContractChange", () => {
     const document = {...validDocument};
     const mockReadPecEmailByIdResult = { ...validPecEmail };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment };
-    const mockedFiscalCode = "CF";
-    const mockIpaCode2FiscalCode = new Map<string, string>([[mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase(), mockedFiscalCode], [document.CODICEIPA.toLowerCase(), "undefined"]]);
-    const mockIpaData = pipe(
-      mockIpaAnyData,
-      TE.map(mockIpaAnyData => ({
-        ...mockIpaAnyData,
-        getFiscalCode: mockIpaCode2FiscalCode.get.bind(mockIpaCode2FiscalCode),
-        hasIpaCode: mockIpaCode2FiscalCode.has.bind(mockIpaCode2FiscalCode)
-      }))
-    );
     mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
@@ -371,7 +347,7 @@ describe("OnContractChange", () => {
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
               .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
     try {
-      await OnContractChangeHandler(mockDao, mockIpaData)(
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
         document
       );
@@ -380,11 +356,11 @@ describe("OnContractChange", () => {
     }
     expect(mockDao).toBeCalledTimes(4);
     expect(mockReadItemById).toBeCalledTimes(3);
-    expect(mockReadItemById).nthCalledWith(2, mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase());
+    expect(mockReadItemById).nthCalledWith(2, document.CODICEIPA.toLowerCase());
     expect(mockUpsert).toBeCalledTimes(1);
     expect(mockUpsert).lastCalledWith({
       id: document.id, 
-      ipaCode: mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase(), 
+      ipaCode: document.CODICEIPA.toLowerCase(), 
       version: document.TIPOCONTRATTO,
       emailDate: mockReadPecEmailByIdResult.DATAEMAIL,
       attachment: mapAttachment(mockReadPecAttachmentByIdResult)
