@@ -12,7 +12,7 @@ const app = express();
 secureExpressApp(app);
 
 // Add express route
-app.get("/api/v1/start", StartProcess({ dao: dao(cosmosdb) }));
+app.post("/api/v1/start", StartProcess({ dao: dao(cosmosdb) }));
 
 const azureFunctionHandler = createAzureFunctionHandler(app);
 

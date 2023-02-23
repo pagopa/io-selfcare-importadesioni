@@ -2,6 +2,7 @@ import * as t from "io-ts";
 import { flow, pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/lib/Either";
 import * as TE from "fp-ts/lib/TaskEither";
+import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { ValidationError } from "../models/error";
@@ -45,6 +46,7 @@ const fetchContractsByIpaCode = (dao: Dao) => (
     ),
     TE.chain(
       flow(
+        r => r.resources,
         t.readonlyArray(IContract).decode,
         TE.fromEither,
         TE.mapLeft(flow(readableReport, E.toError))
@@ -53,8 +55,36 @@ const fetchContractsByIpaCode = (dao: Dao) => (
   );
 
 // Given a list of contracts, get the sublist of the ones we should consider in our process
-const selectContract = (contracts: ReadonlyArray<IContract>): IContract =>
-  contracts[0];
+const selectContract = (contracts: ReadonlyArray<IContract>): IContract => {
+  const orderedVersions = [
+    "V1.0",
+    "V2.0",
+    "V2.2(17 giugno)",
+    "V2.2(29 luglio)",
+    "V2.3"
+  ];
+
+  return (
+    [...contracts] // sort is applied in place, so we clone the array
+      .map(c => ({ ...c, versionNo: orderedVersions.indexOf(c.version) }))
+      // sort contracts array so that the first element is the more relevant
+      .sort((a, b) => {
+        if (a.versionNo > b.versionNo) {
+          return -1; // a is more relevant than b, so it goes first
+        } else if (a.versionNo < b.versionNo) {
+          return 1; // a is less relevant than b, so it goes after
+        }
+        // when version is the same, we choose the latest
+        else if (
+          new Date(a.emailDate).getTime() > new Date(b.emailDate).getTime()
+        ) {
+          return -1; // a is more recent, so it goes first
+        } else {
+          return 1; // a is less recent, so it goes after
+        }
+      })[0]
+  );
+};
 
 const retrieveDelegates = (dao: Dao) => (
   contract: IContract
@@ -68,11 +98,13 @@ const retrieveDelegates = (dao: Dao) => (
         }),
       E.toError
     ),
-    TE.chain(
+    // consider only valid delegates
+    TE.map(
       flow(
-        t.readonlyArray(PecDelegate).decode,
-        TE.fromEither,
-        TE.mapLeft(flow(readableReport, E.toError))
+        r => r.resources,
+        RA.map(PecDelegate.decode),
+        RA.filter(E.isRight),
+        RA.map(_ => _.right)
       )
     ),
     TE.map(delegates => ({ ...contract, delegates }))
@@ -152,27 +184,34 @@ const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
 // Save that the memebeship is not meant to be processed by the current business logic
 const markMembership = (dao: Dao) => (
   ipaCode: IpaCode,
-  status: MembershipStatus
+  status: MembershipStatus,
+  note?: string
 ): TE.TaskEither<Error, void> =>
   pipe(
     TE.tryCatch(() => dao("memberships").readItemById(ipaCode), E.toError),
     TE.chain(
       flow(
+        r => r.resource,
         IMembership.decode,
         TE.fromEither,
         TE.mapLeft(flow(readableReport, E.toError))
       )
     ),
     TE.chain(m =>
-      TE.tryCatch(() => dao("memberships").upsert({ ...m, status }), E.toError)
+      TE.tryCatch(
+        () => dao("memberships").upsert({ ...m, note, status }),
+        E.toError
+      )
     ),
     TE.map(_ => void 0)
   );
 
 // Save that the memebeship is not meant to be processed by the current business logic
 const markMembershipAsDiscarded = (dao: Dao) => (
-  ipaCode: IpaCode
-): TE.TaskEither<Error, void> => markMembership(dao)(ipaCode, "Discarded");
+  ipaCode: IpaCode,
+  note: string
+): TE.TaskEither<Error, void> =>
+  markMembership(dao)(ipaCode, "Discarded", note);
 
 // Save that the memebeship has been correctly claimed to SelfCare
 const markMembershipAsCompleted = (dao: Dao) => (
@@ -219,7 +258,10 @@ const createHandler = ({
                 TE.chain(_ => markMembershipAsCompleted(dao)(ipaCode))
               )
             : // otherwise, we mark the memebership as discarded for future data refinements
-              markMembershipAsDiscarded(dao)(ipaCode)
+              markMembershipAsDiscarded(dao)(
+                ipaCode,
+                `No manager found for contract id#${contract.id}`
+              )
         ),
 
         // return either an empty result or throw an error

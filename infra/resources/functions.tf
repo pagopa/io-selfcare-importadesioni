@@ -91,8 +91,8 @@ module "functions_app" {
     IPA_OPEN_DATA_STORAGE_PATH         = "ipa/ipa-open-data.csv"
 
     # Selfcare connection
-    SELFCARE_API_URL = "" # TBD
-    SELFCARE_API_KEY = "" # TBD
+    SELFCARE_URL = var.selfcare_url
+    SELFCARE_KEY = "any-key"
 
     "AzureWebJobs.OnContractChange.Disabled" = var.env_short == "p" ? "1" : "0" # only enable prod for now
   }

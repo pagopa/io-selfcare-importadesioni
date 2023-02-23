@@ -17,12 +17,12 @@ module "storage_account" {
 }
 
 # https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_queue
-resource "azurerm_storage_queue" "process-adesione" {
-  name                 = "process-adesione"
+resource "azurerm_storage_queue" "process-membership" {
+  name                 = "process-membership"
   storage_account_name = module.storage_account.name
 }
 
-resource "azurerm_storage_queue" "process-adesione-poison" {
-  name                 = "process-adesione-poison"
+resource "azurerm_storage_queue" "process-membership-poison" {
+  name                 = "process-membership-poison"
   storage_account_name = module.storage_account.name
 }
