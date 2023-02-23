@@ -63,7 +63,7 @@ locals {
     },
     {
       name               = "pecDelegato"
-      partition_key_path = "/id"
+      partition_key_path = "/IDALLEGATO"
     },
     {
       name               = "pecSoggettoAggregato"
