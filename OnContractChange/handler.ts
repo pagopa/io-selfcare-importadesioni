@@ -159,7 +159,17 @@ const getIpaCode = (
                   O.fromNullable,
                   O.map(fiscalCode => fiscalCode.toLowerCase().trim()),
                   O.chain(flow(O.fromPredicate(ipaOpenData.hasFiscalCode))),
-                  O.fold(() => undefined, ipaOpenData.getIpaCode)
+                  O.fold(
+                    () =>
+                      pipe(
+                        contract.CODICEIPA.toLowerCase()
+                          .trim()
+                          .replace("-", "_"),
+                        O.fromPredicate(ipaOpenData.hasIpaCode),
+                        O.getOrElse(() => contract.CODICEIPA.toLowerCase()) // why i can't return undefined ?!?
+                      ),
+                    ipaOpenData.getIpaCode
+                  )
                 ),
               ipaOpenData.getIpaCode
             )
