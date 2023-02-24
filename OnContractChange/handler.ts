@@ -24,6 +24,7 @@ import { ContractVersion } from "../models/types";
 import { IIpaOpenData, IpaDataReader } from "./ipa";
 
 const PecContratto = t.interface({
+  CODICEFISCALE: t.union([t.string, t.null]),
   CODICEIPA: NonEmptyString,
   IDALLEGATO: NonNegativeNumber,
   IDEMAIL: NonNegativeNumber,
@@ -33,6 +34,7 @@ const PecContratto = t.interface({
 type PecContratto = t.TypeOf<typeof PecContratto>;
 
 const PecEmail = t.type({
+  COMUNECODICEFISCALE: t.union([t.string, t.null]),
   COMUNECODICEIPA: withDefault(t.string, ""),
   DATAEMAIL: NonEmptyString
 });
@@ -125,7 +127,12 @@ const fetchPecEmail = (context: Context, dao: Dao) => (
         )
       )
     ),
-    TE.map(pecEmail => ({ ...contract, ...pecEmail }))
+    TE.map(pecEmail => ({
+      ...contract,
+      COMUNECODICEFISCALE: pecEmail.COMUNECODICEFISCALE,
+      COMUNECODICEIPA: pecEmail.COMUNECODICEIPA,
+      DATAEMAIL: pecEmail.DATAEMAIL
+    }))
   );
 
 const getIpaCode = (
@@ -133,21 +140,25 @@ const getIpaCode = (
   ipaOpenData: IIpaOpenData
 ): string =>
   pipe(
-    contract.CODICEIPA.toLowerCase(),
+    contract.CODICEIPA.toLowerCase().trim(),
     O.fromPredicate(ipaOpenData.hasIpaCode),
     O.getOrElse(() =>
       pipe(
-        contract.COMUNECODICEIPA.toLowerCase(),
+        contract.COMUNECODICEIPA.toLowerCase().trim(),
         O.fromPredicate(ipaOpenData.hasIpaCode),
         O.getOrElse(() =>
           pipe(
-            contract.CODICEIPA.toLowerCase(),
-            O.fromPredicate(ipaOpenData.hasMunicipalLandCode),
+            contract.CODICEFISCALE,
+            O.fromNullable,
+            O.map(fiscalCode => fiscalCode.toLowerCase().trim()),
+            O.chain(flow(O.fromPredicate(ipaOpenData.hasFiscalCode))),
             O.fold(
               () =>
                 pipe(
-                  contract.COMUNECODICEIPA.toLowerCase(),
-                  O.fromPredicate(ipaOpenData.hasMunicipalLandCode),
+                  contract.COMUNECODICEFISCALE,
+                  O.fromNullable,
+                  O.map(fiscalCode => fiscalCode.toLowerCase().trim()),
+                  O.chain(flow(O.fromPredicate(ipaOpenData.hasFiscalCode))),
                   O.fold(() => undefined, ipaOpenData.getIpaCode)
                 ),
               ipaOpenData.getIpaCode

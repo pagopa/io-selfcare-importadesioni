@@ -9,21 +9,19 @@ import * as E from "fp-ts/lib/Either";
 
 export type IpaCode = string;
 export type FiscalCode = string;
-export type MunicipalLandCode = string;
 /**
  * An object representing organizations data retrieved from IPA
  */
 export interface IIpaOpenData {
   readonly getFiscalCode: (key: IpaCode) => FiscalCode | undefined;
-  readonly getIpaCode: (key: MunicipalLandCode) => IpaCode | undefined;
+  readonly getIpaCode: (key: FiscalCode) => IpaCode | undefined;
   readonly hasIpaCode: (key: IpaCode) => boolean;
-  readonly hasMunicipalLandCode: (key: MunicipalLandCode) => boolean;
+  readonly hasFiscalCode: (key: FiscalCode) => boolean;
 }
 
 enum Columns {
   Codice_IPA = 1,
-  Codice_fiscale_ente = 3,
-  Codice_catastale_comune = 16
+  Codice_fiscale_ente = 3
 }
 
 /**
@@ -34,7 +32,7 @@ enum Columns {
  */
 export const parseIpaData = async (data: string): Promise<IIpaOpenData> => {
   const ipaCode2FiscalCode = new Map<string, string>();
-  const municipalLandCode2ipaCode = new Map<string, string>();
+  const fiscalCode2ipaCode = new Map<string, string>();
   const records: ReadonlyArray<ReadonlyArray<string>> = parse(data, {
     from_line: 2
   });
@@ -43,18 +41,16 @@ export const parseIpaData = async (data: string): Promise<IIpaOpenData> => {
       row[Columns.Codice_IPA].toLowerCase(),
       row[Columns.Codice_fiscale_ente]
     );
-    municipalLandCode2ipaCode.set(
-      row[Columns.Codice_catastale_comune].toLowerCase(),
+    fiscalCode2ipaCode.set(
+      row[Columns.Codice_fiscale_ente].toLowerCase(),
       row[Columns.Codice_IPA].toLowerCase()
     );
   });
   return {
     getFiscalCode: ipaCode2FiscalCode.get.bind(ipaCode2FiscalCode),
-    getIpaCode: municipalLandCode2ipaCode.get.bind(municipalLandCode2ipaCode),
-    hasIpaCode: ipaCode2FiscalCode.has.bind(ipaCode2FiscalCode),
-    hasMunicipalLandCode: municipalLandCode2ipaCode.has.bind(
-      municipalLandCode2ipaCode
-    )
+    getIpaCode: fiscalCode2ipaCode.get.bind(fiscalCode2ipaCode),
+    hasFiscalCode: fiscalCode2ipaCode.has.bind(fiscalCode2ipaCode),
+    hasIpaCode: ipaCode2FiscalCode.has.bind(ipaCode2FiscalCode)
   };
 };
 

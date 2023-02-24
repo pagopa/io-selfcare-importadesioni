@@ -7,6 +7,7 @@ import OnContractChangeHandler from "../handler";
 import * as TE from "fp-ts/lib/TaskEither";
 import { IIpaOpenData } from "../ipa";
 import { pipe } from "fp-ts/lib/function";
+import { key } from "monocle-ts/lib/Lens";
 
 const mockContext = ({
   log: {
@@ -36,7 +37,7 @@ const mockIpaAnyData = TE.right({
   getFiscalCode: (_) => undefined,
   getIpaCode: (_) => undefined,
   hasIpaCode: (_) => false,
-  hasMunicipalLandCode: (_) => false
+  hasFiscalCode: (_) => false
 } as IIpaOpenData)
 
 
@@ -60,6 +61,7 @@ afterEach(() => {
 
 describe("OnContractChange", () => {
   const validDocument = {
+    CODICEFISCALE: "CODICEFISCALE",
     CODICEIPA: "CODICEIPA",
     id: "id",
     IDALLEGATO: 1,
@@ -68,6 +70,7 @@ describe("OnContractChange", () => {
   };
   const validPecEmail = {
     DATAEMAIL: "2021-12-06T17:33:40.000000000+00:00",
+    COMUNECODICEFISCALE: "COMUNECODICEFISCALE",
     COMUNECODICEIPA: "COMUNECODICEIPA"
   };
   const validPecAttachment = {
@@ -288,28 +291,27 @@ describe("OnContractChange", () => {
   });
 
    it.each`
-    codiceIpa                   | comuneCodiceIpa                  | ipaCode2FiscalCode                                                 | municipalLandCode2ipaCode         | expectedIpaCode                                 | expectedFiscalCode  | testCase
-    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map()}                                                       | ${new Map()}                      | ${validDocument.CODICEIPA.toLowerCase()}        | ${undefined}        | ${"not a 'Main Institution'"}
-    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map([[validDocument.CODICEIPA.toLowerCase(), "CF"]])}        | ${new Map()}                      | ${validDocument.CODICEIPA.toLowerCase()}        | ${"CF"}             | ${"'Main Institution' IPA code from 'CODICEIPA'"}
-    ${validDocument.CODICEIPA}  | ${validPecEmail.COMUNECODICEIPA} | ${new Map([[validPecEmail.COMUNECODICEIPA.toLowerCase(), "CF"]])}  | ${new Map()}                      | ${validPecEmail.COMUNECODICEIPA.toLowerCase()}  | ${"CF"}             | ${"'Main Institution' IPA code from 'COMUNECODICEIPA'"}
-    ${"MLC"}                    | ${validPecEmail.COMUNECODICEIPA} | ${new Map([["ipaCode", "CF"]])}                                    | ${new Map([["mlc", "ipaCode"]])}  | ${"ipaCode"}                                    | ${"CF"}             | ${"'Main Institution' IPA code from 'CODICEIPA' (MLC)"}
-    ${validDocument.CODICEIPA}  | ${"MLC"}                         | ${new Map([["ipaCode", "CF"]])}                                    | ${new Map([["mlc", "ipaCode"]])}  | ${"ipaCode"}                                    | ${"CF"}             | ${"'Main Institution' IPA code from 'COMUNECODICEIPA' (MLC)"}
+    codiceIpa       | comuneCodiceIpa      | codiceFiscale      | comuneCodiceFiscale       | ipaCode2FiscalCode                       | fiscalCode2ipaCode                               | expectedIpaCode       | expectedFiscalCode  | expectedMainInstitution | testCase
+    ${"CODICEIPA"}  | ${"COMUNECODICEIPA"} | ${null}            | ${null}                   | ${new Map()}                             | ${new Map()}                                     | ${"codiceipa"}        | ${undefined}        | ${false}                | ${"not a 'Main Institution'"}
+    ${"CODICEIPA"}  | ${"COMUNECODICEIPA"} | ${null}            | ${null}                   | ${new Map([["codiceipa", "CF"]])}        | ${new Map()}                                     | ${"codiceipa"}        | ${"CF"}             | ${true}                 | ${"'Main Institution' IPA code from 'CODICEIPA'"}
+    ${"CODICEIPA"}  | ${"COMUNECODICEIPA"} | ${null}            | ${null}                   | ${new Map([["comunecodiceipa", "CF"]])}  | ${new Map()}                                     | ${"comunecodiceipa"}  | ${"CF"}             | ${true}                 | ${"'Main Institution' IPA code from 'COMUNECODICEIPA'"}
+    ${"CODICEIPA"}  | ${"COMUNECODICEIPA"} | ${"CODICEFISCALE"} | ${null}                   | ${new Map([["ipaCode", "CF"]])}          | ${new Map([["codicefiscale", "ipaCode"]])}       | ${"ipaCode"}          | ${"CF"}             | ${true}                 | ${"'Main Institution' IPA code from 'CODICEIPA' (MLC)"}
+    ${"CODICEIPA"}  | ${"COMUNECODICEIPA"} | ${"CODICEFISCALE"} | ${"COMUNECODICEFISCALE"}  | ${new Map([["ipaCode", "CF"]])}          | ${new Map([["comunecodicefiscale", "ipaCode"]])} | ${"ipaCode"}          | ${"CF"}             | ${true}                 | ${"'Main Institution' IPA code from 'COMUNECODICEIPA' (MLC)"}
    `
-   ("should complete without errors: $testCase", async ({ codiceIpa, comuneCodiceIpa, ipaCode2FiscalCode, municipalLandCode2ipaCode, expectedIpaCode, expectedFiscalCode }) => {
+   ("should complete without errors: $testCase", async ({ codiceIpa, comuneCodiceIpa, ipaCode2FiscalCode, fiscalCode2ipaCode, expectedIpaCode, expectedFiscalCode, expectedMainInstitution }) => {
     const document = {...validDocument, CODICEIPA: codiceIpa};
     const mockReadPecEmailByIdResult = { ...validPecEmail, COMUNECODICEIPA: comuneCodiceIpa };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment, NOMEALLEGATONUOVO: "new name" } as any;
     mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
-    
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
               .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
     const mockIpaData = TE.right({
       getFiscalCode: ipaCode2FiscalCode.get.bind(ipaCode2FiscalCode),
       hasIpaCode: ipaCode2FiscalCode.has.bind(ipaCode2FiscalCode),
-      hasMunicipalLandCode: municipalLandCode2ipaCode.has.bind(municipalLandCode2ipaCode),
-      getIpaCode: municipalLandCode2ipaCode.get.bind(municipalLandCode2ipaCode),
+      hasFiscalCode: fiscalCode2ipaCode.has.bind(fiscalCode2ipaCode),
+      getIpaCode: fiscalCode2ipaCode.get.bind(fiscalCode2ipaCode)
     });
     try {
       await OnContractChangeHandler(mockDao, mockIpaData)(
@@ -325,7 +327,7 @@ describe("OnContractChange", () => {
     expect(mockUpsert).nthCalledWith(1, {id: expectedIpaCode,
       fiscalCode: expectedFiscalCode,
       ipaCode: expectedIpaCode,
-      mainInstitution: ipaCode2FiscalCode.has(expectedIpaCode),
+      mainInstitution: expectedMainInstitution,
       status: "Initial"});
     expect(mockUpsert).nthCalledWith(2, {
       id: document.id, 
