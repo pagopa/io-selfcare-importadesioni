@@ -6,6 +6,7 @@ import { flow, pipe } from "fp-ts/lib/function";
 
 import * as TE from "fp-ts/lib/TaskEither";
 import * as E from "fp-ts/lib/Either";
+import * as O from "fp-ts/lib/Option";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import { withDefault } from "@pagopa/ts-commons/lib/types";
@@ -20,9 +21,10 @@ import {
   FetchPecEmailError
 } from "../models/error";
 import { ContractVersion } from "../models/types";
-import { IpaOpenData, IpaDataReader } from "./ipa";
+import { FiscalCode, IIpaOpenData, IpaDataReader } from "./ipa";
 
 const PecContratto = t.interface({
+  CODICEFISCALE: t.union([t.string, t.null]),
   CODICEIPA: NonEmptyString,
   IDALLEGATO: NonNegativeNumber,
   IDEMAIL: NonNegativeNumber,
@@ -32,6 +34,7 @@ const PecContratto = t.interface({
 type PecContratto = t.TypeOf<typeof PecContratto>;
 
 const PecEmail = t.type({
+  COMUNECODICEFISCALE: t.union([t.string, t.null]),
   COMUNECODICEIPA: withDefault(t.string, ""),
   DATAEMAIL: NonEmptyString
 });
@@ -124,36 +127,96 @@ const fetchPecEmail = (context: Context, dao: Dao) => (
         )
       )
     ),
-    TE.map(pecEmail => ({ ...contract, ...pecEmail }))
+    TE.map(pecEmail => ({
+      ...contract,
+      COMUNECODICEFISCALE: pecEmail.COMUNECODICEFISCALE,
+      COMUNECODICEIPA: pecEmail.COMUNECODICEIPA,
+      DATAEMAIL: pecEmail.DATAEMAIL
+    }))
   );
 
-const decorateFromIPA = (context: Context, ipaOpenData: IpaOpenData) => (
-  contract: EmailDecoratedPecContract
-): E.Either<unknown, IpaDecoratedPecContract> =>
+const parseAndVerify = (ipaOpenData: IIpaOpenData) => (
+  fiscalCode: FiscalCode
+): O.Option<FiscalCode> =>
   pipe(
-    ipaOpenData.has(contract.COMUNECODICEIPA.toLowerCase())
-      ? contract.COMUNECODICEIPA.toLowerCase()
-      : contract.CODICEIPA.toLowerCase(),
-    ipaCode => ({
-      ipaCode,
-      ipaFiscalCode: ipaOpenData.get(ipaCode),
-      isEnteCentrale: ipaOpenData.has(ipaCode)
-    }),
-    IpaRetrievedData.decode,
-    E.mapLeft(
-      flow(
-        readableReport,
-        msg =>
-          `decorateFromIPA|Invalid contract for CODIPA: ${contract.CODICEIPA}, error: ${msg}`,
-        errorMessage => logMessage(context.log.error, errorMessage),
-        // validation may fail if, for an "ente centrale", no fiscal code is provided
-        errorMessage => new FiscalCodeNotFoundError(errorMessage)
+    fiscalCode.match(/(?<!\d)[0-9]{11}(?!\d)/g),
+    O.fromNullable,
+    O.map(RA.filter(ipaOpenData.hasFiscalCode)),
+    O.chain(RA.head)
+  );
+
+const getIpaCode = (
+  contract: EmailDecoratedPecContract,
+  ipaOpenData: IIpaOpenData
+): string =>
+  pipe(
+    contract.CODICEIPA.toLowerCase().trim(),
+    O.fromPredicate(ipaOpenData.hasIpaCode),
+    O.getOrElse(() =>
+      pipe(
+        contract.COMUNECODICEIPA.toLowerCase().trim(),
+        O.fromPredicate(ipaOpenData.hasIpaCode),
+        O.getOrElse(() =>
+          pipe(
+            contract.CODICEFISCALE,
+            O.fromNullable,
+            O.map(fiscalCode => fiscalCode.trim()),
+            O.chain(parseAndVerify(ipaOpenData)),
+            O.fold(
+              () =>
+                pipe(
+                  contract.COMUNECODICEFISCALE,
+                  O.fromNullable,
+                  O.map(fiscalCode => fiscalCode.trim()),
+                  O.chain(parseAndVerify(ipaOpenData)),
+                  O.fold(
+                    () =>
+                      pipe(
+                        contract.CODICEIPA.toLowerCase()
+                          .trim()
+                          .replace("-", "_"),
+                        O.fromPredicate(ipaOpenData.hasIpaCode),
+                        O.fold(() => undefined, t.identity)
+                      ),
+                    ipaOpenData.getIpaCode
+                  )
+                ),
+              ipaOpenData.getIpaCode
+            )
+          )
+        )
       )
     ),
-    E.map(ipaRetrievedData => ({
-      ...contract,
-      ...ipaRetrievedData
-    }))
+    O.fromNullable,
+    O.getOrElse(() => contract.CODICEIPA.toLowerCase())
+  );
+
+const decorateFromIPA = (context: Context, ipaOpenData: IIpaOpenData) => (
+  contract: EmailDecoratedPecContract
+): E.Either<unknown, IpaDecoratedPecContract> =>
+  pipe(getIpaCode(contract, ipaOpenData), ipaCode =>
+    pipe(
+      {
+        ipaCode,
+        ipaFiscalCode: ipaOpenData.getFiscalCode(ipaCode),
+        isEnteCentrale: ipaOpenData.hasIpaCode(ipaCode)
+      },
+      IpaRetrievedData.decode,
+      E.mapLeft(
+        flow(
+          readableReport,
+          msg =>
+            `decorateFromIPA|Invalid contract (id = ${contract.id}) for CODIPA: ${ipaCode}, error: ${msg}`,
+          errorMessage => logMessage(context.log.error, errorMessage),
+          // validation may fail if, for an "ente centrale", no fiscal code is provided
+          errorMessage => new FiscalCodeNotFoundError(errorMessage)
+        )
+      ),
+      E.map(ipaRetrievedData => ({
+        ...contract,
+        ...ipaRetrievedData
+      }))
+    )
   );
 
 const fetchMembership = (context: Context, dao: Dao) => (
@@ -316,7 +379,7 @@ const saveContract = (context: Context, dao: Dao) => (
 const HandleSingleDocument = (
   context: Context,
   dao: Dao,
-  ipaOpenData: IpaOpenData
+  ipaOpenData: IIpaOpenData
   // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 ) => (document: unknown) =>
   pipe(

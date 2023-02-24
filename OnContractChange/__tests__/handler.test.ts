@@ -1,11 +1,13 @@
 import { FeedOptions, FeedResponse, ItemDefinition, ItemResponse, SqlQuerySpec } from "@azure/cosmos";
 import { Context } from "@azure/functions";
 import { Dao } from "../../models/dao";
-import { IAttachment } from "../../models/types";
 import{ FetchMembershipError, FetchPecAttachmentError, FetchPecEmailError, FiscalCodeNotFoundError, SaveContractError, UpsertError, ValidationError } from "../../models/error";
 import OnContractChangeHandler from "../handler";
 
 import * as TE from "fp-ts/lib/TaskEither";
+import { IIpaOpenData } from "../ipa";
+import { pipe } from "fp-ts/lib/function";
+import { key } from "monocle-ts/lib/Lens";
 
 const mockContext = ({
   log: {
@@ -31,7 +33,12 @@ const mockDao = jest.fn<ReturnType<Dao>, Parameters<Dao>>(_ => ({
 
 
 const mockIpaDefaultError = TE.left(new Error("mockReadIpaData not initialized"))
-const mockIpaAnyData = TE.right(new Map())
+const mockIpaAnyData = TE.right({
+  getFiscalCode: (_) => undefined,
+  getIpaCode: (_) => undefined,
+  hasIpaCode: (_) => false,
+  hasFiscalCode: (_) => false
+} as IIpaOpenData)
 
 
 
@@ -54,6 +61,7 @@ afterEach(() => {
 
 describe("OnContractChange", () => {
   const validDocument = {
+    CODICEFISCALE: "CODICEFISCALE",
     CODICEIPA: "CODICEIPA",
     id: "id",
     IDALLEGATO: 1,
@@ -62,6 +70,7 @@ describe("OnContractChange", () => {
   };
   const validPecEmail = {
     DATAEMAIL: "2021-12-06T17:33:40.000000000+00:00",
+    COMUNECODICEFISCALE: "COMUNECODICEFISCALE",
     COMUNECODICEIPA: "COMUNECODICEIPA"
   };
   const validPecAttachment = {
@@ -151,7 +160,15 @@ describe("OnContractChange", () => {
   mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: { ...validPecEmail }} as ItemResponse<any>)
                   .mockResolvedValueOnce(mockReadItemByIdResult);
   // force to return an undefined fiscal code to test robustness
-  const mockReadIpaData = TE.right(new Map([[document.CODICEIPA.toLowerCase(), undefined as any]]));
+  const mockIpaCode2FiscalCode = new Map([[document.CODICEIPA.toLowerCase(), undefined as any]]);
+  const mockReadIpaData = pipe(
+    mockIpaAnyData,
+    TE.map(mockIpaAnyData => ({
+      ...mockIpaAnyData,
+      getFiscalCode: mockIpaCode2FiscalCode.get.bind(mockIpaCode2FiscalCode),
+      hasIpaCode: mockIpaCode2FiscalCode.has.bind(mockIpaCode2FiscalCode)
+    }))
+  );
   try {
     await OnContractChangeHandler(mockDao, mockReadIpaData)(
       mockContext,
@@ -274,22 +291,31 @@ describe("OnContractChange", () => {
   });
 
    it.each`
-    ipaOpenData                                             | institutionType
-    ${new Map()}                                            | ${"not a 'Main Institution'"}
-    ${new Map([[validDocument.CODICEIPA, "fiscal code"]])}  | ${"'Main Institution'"}
+    CODICEIPA        | COMUNECODICEIPA      | CODICEFISCALE                  | COMUNECODICEFISCALE             | ipaCode2FiscalCode                       | fiscalCode2ipaCode                                | expectedIpaCode       | expectedFiscalCode  | expectedMainInstitution | testCase
+    ${"CODICEIPA"}   | ${"COMUNECODICEIPA"} | ${null}                        | ${null}                         | ${new Map()}                             | ${new Map()}                                      | ${"codiceipa"}        | ${undefined}        | ${false}                | ${"not a 'Main Institution'"}
+    ${"CODICEIPA"}   | ${"COMUNECODICEIPA"} | ${null}                        | ${null}                         | ${new Map([["codiceipa", "CF"]])}        | ${new Map()}                                      | ${"codiceipa"}        | ${"CF"}             | ${true}                 | ${"'Main Institution' IPA code from 'CODICEIPA'"}
+    ${"CODICEIPA"}   | ${"COMUNECODICEIPA"} | ${null}                        | ${null}                         | ${new Map([["comunecodiceipa", "CF"]])}  | ${new Map()}                                      | ${"comunecodiceipa"}  | ${"CF"}             | ${true}                 | ${"'Main Institution' IPA code from 'COMUNECODICEIPA'"}
+    ${"CODICEIPA"}   | ${"COMUNECODICEIPA"} | ${"Cf e p.iva 00222250904"}    | ${null}                         | ${new Map([["ipaCode", "CF"]])}          | ${new Map([["00222250904", "ipaCode"]])}          | ${"ipaCode"}          | ${"CF"}             | ${true}                 | ${"'Main Institution' IPA code from 'CODICEFISCALE' (regex)"}
+    ${"CODICEIPA"}   | ${"COMUNECODICEIPA"} | ${"CODICEFISCALE"}             | ${"80004690113 / 00213620115"}  | ${new Map([["ipaCode", "CF"]])}          | ${new Map([["00213620115", "ipaCode"]])}          | ${"ipaCode"}          | ${"CF"}             | ${true}                 | ${"'Main Institution' IPA code from 'COMUNECODICEFISCALE' (regex)"}
+    ${"CODICE-IPA"}  | ${"COMUNECODICEIPA"} | ${"CODICEFISCALE"}             | ${"COMUNECODICEFISCALE"}        | ${new Map([["codice_ipa", "CF"]])}       | ${new Map()}                                      | ${"codice_ipa"}       | ${"CF"}             | ${true}                 | ${"'Main Institution' IPA code from 'CODICEIPA' (replaced)"}
    `
-   ("should complete without errors: $institutionType", async ({ ipaOpenData }) => {
-    const document = {...validDocument};
-    const mockReadPecEmailByIdResult = { ...validPecEmail };
+   ("should complete without errors: $testCase", async ({ CODICEIPA, COMUNECODICEIPA, CODICEFISCALE, COMUNECODICEFISCALE, ipaCode2FiscalCode, fiscalCode2ipaCode, expectedIpaCode, expectedFiscalCode, expectedMainInstitution }) => {
+    const document = {...validDocument, CODICEIPA, CODICEFISCALE };
+    const mockReadPecEmailByIdResult = { ...validPecEmail, COMUNECODICEIPA, COMUNECODICEFISCALE };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment, NOMEALLEGATONUOVO: "new name" } as any;
     mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 404} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
-    
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
               .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
+    const mockIpaData = TE.right({
+      getFiscalCode: ipaCode2FiscalCode.get.bind(ipaCode2FiscalCode),
+      hasIpaCode: ipaCode2FiscalCode.has.bind(ipaCode2FiscalCode),
+      hasFiscalCode: fiscalCode2ipaCode.has.bind(fiscalCode2ipaCode),
+      getIpaCode: fiscalCode2ipaCode.get.bind(fiscalCode2ipaCode)
+    });
     try {
-      await OnContractChangeHandler(mockDao, TE.right(ipaOpenData))(
+      await OnContractChangeHandler(mockDao, mockIpaData)(
         mockContext,
         document
       );
@@ -299,14 +325,14 @@ describe("OnContractChange", () => {
     expect(mockDao).toBeCalledTimes(5);
     expect(mockReadItemById).toBeCalledTimes(3);
     expect(mockUpsert).toBeCalledTimes(2);
-    expect(mockUpsert).nthCalledWith(1, {id: document.CODICEIPA.toLowerCase(),
-      fiscalCode: ipaOpenData.get(document.CODICEIPA.toLowerCase()),
-      ipaCode: document.CODICEIPA.toLowerCase(),
-      mainInstitution: ipaOpenData.has(document.CODICEIPA.toLowerCase()),
+    expect(mockUpsert).nthCalledWith(1, {id: expectedIpaCode,
+      fiscalCode: expectedFiscalCode,
+      ipaCode: expectedIpaCode,
+      mainInstitution: expectedMainInstitution,
       status: "Initial"});
     expect(mockUpsert).nthCalledWith(2, {
       id: document.id, 
-      ipaCode: document.CODICEIPA.toLowerCase(), 
+      ipaCode: expectedIpaCode, 
       version: document.TIPOCONTRATTO,
       emailDate: mockReadPecEmailByIdResult.DATAEMAIL,
       attachment: mapAttachment(mockReadPecAttachmentByIdResult)
@@ -317,8 +343,6 @@ describe("OnContractChange", () => {
     const document = {...validDocument};
     const mockReadPecEmailByIdResult = { ...validPecEmail };
     const mockReadPecAttachmentByIdResult = { ...validPecAttachment };
-    const mockedFiscalCode = "CF";
-    const mockIpaData = TE.right(new Map<string, string>([[mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase(), mockedFiscalCode], [document.CODICEIPA.toLowerCase(), "undefined"]]));
     mockReadItemById.mockResolvedValueOnce({statusCode: 200, resource: mockReadPecEmailByIdResult} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
                     .mockResolvedValueOnce({statusCode: 200, resource: mockReadPecAttachmentByIdResult} as ItemResponse<any>);
@@ -326,7 +350,7 @@ describe("OnContractChange", () => {
     mockUpsert.mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>)
               .mockResolvedValueOnce({statusCode: 200} as ItemResponse<any>);
     try {
-      await OnContractChangeHandler(mockDao, mockIpaData)(
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
         document
       );
@@ -335,11 +359,11 @@ describe("OnContractChange", () => {
     }
     expect(mockDao).toBeCalledTimes(4);
     expect(mockReadItemById).toBeCalledTimes(3);
-    expect(mockReadItemById).nthCalledWith(2, mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase());
+    expect(mockReadItemById).nthCalledWith(2, document.CODICEIPA.toLowerCase());
     expect(mockUpsert).toBeCalledTimes(1);
     expect(mockUpsert).lastCalledWith({
       id: document.id, 
-      ipaCode: mockReadPecEmailByIdResult.COMUNECODICEIPA.toLowerCase(), 
+      ipaCode: document.CODICEIPA.toLowerCase(), 
       version: document.TIPOCONTRATTO,
       emailDate: mockReadPecEmailByIdResult.DATAEMAIL,
       attachment: mapAttachment(mockReadPecAttachmentByIdResult)
