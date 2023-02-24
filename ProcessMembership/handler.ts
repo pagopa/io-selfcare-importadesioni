@@ -221,8 +221,10 @@ const markMembershipAsDiscarded = (dao: Dao) => (
 
 // Save that the memebeship has been correctly claimed to SelfCare
 const markMembershipAsCompleted = (dao: Dao) => (
-  ipaCode: IpaCode
-): TE.TaskEither<Error, void> => markMembership(dao)(ipaCode, "Processed");
+  ipaCode: IpaCode,
+  note: string
+): TE.TaskEither<Error, void> =>
+  markMembership(dao)(ipaCode, "Processed", note);
 
 const createHandler = ({
   dao,
@@ -261,7 +263,12 @@ const createHandler = ({
               pipe(
                 composeSelfCareMembershipClaim(fiscalCode, contract),
                 submitMembershipClaimToSelfcare(selfcareClient),
-                TE.chain(_ => markMembershipAsCompleted(dao)(ipaCode))
+                TE.chain(_ =>
+                  markMembershipAsCompleted(dao)(
+                    ipaCode,
+                    `Imported with contract id#${contract.id}`
+                  )
+                )
               )
             : // otherwise, we mark the memebership as discarded for future data refinements
               markMembershipAsDiscarded(dao)(
