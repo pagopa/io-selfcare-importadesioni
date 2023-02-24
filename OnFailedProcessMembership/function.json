@@ -1,0 +1,12 @@
+{
+  "bindings": [
+    {
+      "queueName": "process-membership-poison",
+      "connection": "INTERNAL_STORAGE_CONNECTION_STRING",
+      "name": "membership",
+      "type": "queueTrigger",
+      "direction": "in"
+    }
+  ],
+  "scriptFile": "../dist/OnFailedProcessMembership/index.js"
+}
