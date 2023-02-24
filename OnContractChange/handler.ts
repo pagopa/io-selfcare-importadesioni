@@ -21,7 +21,7 @@ import {
   FetchPecEmailError
 } from "../models/error";
 import { ContractVersion } from "../models/types";
-import { IIpaOpenData, IpaDataReader } from "./ipa";
+import { FiscalCode, IIpaOpenData, IpaDataReader } from "./ipa";
 
 const PecContratto = t.interface({
   CODICEFISCALE: t.union([t.string, t.null]),
@@ -135,6 +135,16 @@ const fetchPecEmail = (context: Context, dao: Dao) => (
     }))
   );
 
+const parseAndVerify = (ipaOpenData: IIpaOpenData) => (
+  fiscalCode: FiscalCode
+): O.Option<FiscalCode> =>
+  pipe(
+    fiscalCode.match(/(?<!\d)[0-9]{11}(?!\d)/g),
+    O.fromNullable,
+    O.map(RA.filter(ipaOpenData.hasFiscalCode)),
+    O.chain(RA.head)
+  );
+
 const getIpaCode = (
   contract: EmailDecoratedPecContract,
   ipaOpenData: IIpaOpenData
@@ -150,15 +160,15 @@ const getIpaCode = (
           pipe(
             contract.CODICEFISCALE,
             O.fromNullable,
-            O.map(fiscalCode => fiscalCode.toLowerCase().trim()),
-            O.chain(flow(O.fromPredicate(ipaOpenData.hasFiscalCode))),
+            O.map(fiscalCode => fiscalCode.trim()),
+            O.chain(parseAndVerify(ipaOpenData)),
             O.fold(
               () =>
                 pipe(
                   contract.COMUNECODICEFISCALE,
                   O.fromNullable,
-                  O.map(fiscalCode => fiscalCode.toLowerCase().trim()),
-                  O.chain(flow(O.fromPredicate(ipaOpenData.hasFiscalCode))),
+                  O.map(fiscalCode => fiscalCode.trim()),
+                  O.chain(parseAndVerify(ipaOpenData)),
                   O.fold(
                     () =>
                       pipe(
@@ -166,7 +176,7 @@ const getIpaCode = (
                           .trim()
                           .replace("-", "_"),
                         O.fromPredicate(ipaOpenData.hasIpaCode),
-                        O.getOrElse(() => contract.CODICEIPA.toLowerCase()) // why i can't return undefined ?!?
+                        O.fold(() => undefined, t.identity)
                       ),
                     ipaOpenData.getIpaCode
                   )
