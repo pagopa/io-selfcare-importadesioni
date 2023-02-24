@@ -14,7 +14,8 @@ export type MembershipStatus = t.TypeOf<typeof MembershipStatus>;
 export const MembershipStatus = t.union([
   t.literal("Initial"),
   t.literal("Processed"),
-  t.literal("Discarded")
+  t.literal("Discarded"),
+  t.literal("Failed")
 ]);
 
 // The unique version of contract
