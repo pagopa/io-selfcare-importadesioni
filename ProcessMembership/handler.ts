@@ -6,6 +6,7 @@ import * as TE from "fp-ts/lib/TaskEither";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import {
+  FiscalCode,
   NonEmptyString,
   OrganizationFiscalCode
 } from "@pagopa/ts-commons/lib/strings";
@@ -133,7 +134,7 @@ const fixRawDelegates = (
       hasKey(x, "EMAIL") && typeof x.EMAIL === "string"
         ? {
             ...x,
-            CODICEFISCALE: x.EMAIL.replace(/\s/gi, "") /* remove spaces */
+            EMAIL: x.EMAIL.replace(/\s/gi, "") /* remove spaces */
           }
         : x
     );
@@ -230,6 +231,15 @@ const parseDelegates = (
       malformedManager.CODICEFISCALE.match(/[a-z]/)?.length
     ) {
       return E.left("wrong-cf-lowercase");
+    }
+
+    // Some fiscal code has simply bad pattern
+    if (
+      "CODICEFISCALE" in malformedManager &&
+      typeof malformedManager.CODICEFISCALE === "string" &&
+      pipe(malformedManager.CODICEFISCALE, FiscalCode.decode, E.isLeft)
+    ) {
+      return E.left("wrong-cf");
     }
   }
 
