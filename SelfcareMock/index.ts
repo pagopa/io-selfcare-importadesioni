@@ -1,10 +1,11 @@
 import { AzureFunction } from "@azure/functions";
 
-const httpStart: AzureFunction = async ({
-  executionContext: { functionName },
-  req,
-  log
-}) => {
+const httpStart: AzureFunction = async context => {
+  const {
+    executionContext: { functionName },
+    req,
+    log
+  } = context;
   const externalInstitutionId = req?.params?.externalInstitutionId;
 
   if (!externalInstitutionId) {
@@ -16,7 +17,8 @@ const httpStart: AzureFunction = async ({
   const trace = `${functionName} SUCCESS: request received for externalInstitutionId=${externalInstitutionId}`;
   log.info(trace);
 
-  return { statusCode: 201 };
+  // eslint-disable-next-line functional/immutable-data
+  context.res = { status: 201 };
 };
 
 export default httpStart;
