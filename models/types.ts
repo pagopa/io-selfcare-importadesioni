@@ -1,4 +1,7 @@
-import { NonNegativeNumber } from "@pagopa/ts-commons/lib/numbers";
+import {
+  NonNegativeNumber,
+  NumberFromString
+} from "@pagopa/ts-commons/lib/numbers";
 import {
   EmailString,
   FiscalCode,
@@ -72,7 +75,7 @@ export type PecDelegate = t.TypeOf<typeof PecDelegate>;
 export const PecDelegate = t.interface({
   CODICEFISCALE: FiscalCode,
   EMAIL: EmailString,
-  IDALLEGATO: NonNegativeNumber,
+  IDALLEGATO: NonEmptyString,
   NOMINATIVO: t.union([NonEmptyString, t.null]),
   TIPODELEGATO: TipoDelegato,
   id: NonEmptyString
