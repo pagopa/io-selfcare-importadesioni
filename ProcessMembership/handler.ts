@@ -273,7 +273,7 @@ const createHandler = ({
             : // otherwise, we mark the memebership as discarded for future data refinements
               markMembershipAsDiscarded(dao)(
                 ipaCode,
-                `No manager found for contract id#${contract.id}`
+                `No manager found for contract id#${contract.id} attachement id#${contract.attachment.id}`
               )
         ),
 
