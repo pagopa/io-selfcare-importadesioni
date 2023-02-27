@@ -2,12 +2,7 @@ import { Context } from "@azure/functions";
 import { dao } from "../../__mocks__/dao";
 import { ValidationError } from "../../models/error";
 import createHandler from "../handler";
-import {
-  ContractVersion,
-  IAttachment,
-  IContract,
-  PecDelegate
-} from "../../models/types";
+import { ContractVersion, IAttachment, IContract } from "../../models/types";
 import { selfcareClient } from "../../__mocks__/selfcare";
 import * as E from "fp-ts/lib/Either";
 import { pipe } from "fp-ts/lib/function";
@@ -44,22 +39,6 @@ const _aContract: IContract = pipe(
     version: aContractVersion
   },
   IContract.decode,
-  E.mapLeft(readableReport),
-  E.getOrElseW(err => {
-    throw err;
-  })
-);
-
-const _aDelegate = pipe(
-  {
-    CODICEFISCALE: "AAAAAA00A00A000A",
-    EMAIL: "email@example.com",
-    IDALLEGATO: 20,
-    NOMINATIVO: "mario rossi",
-    TIPODELEGATO: "Altro",
-    id: "string"
-  },
-  PecDelegate.decode,
   E.mapLeft(readableReport),
   E.getOrElseW(err => {
     throw err;
