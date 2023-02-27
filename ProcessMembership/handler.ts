@@ -1,10 +1,15 @@
+/* eslint-disable sonarjs/no-duplicate-string */
 import * as t from "io-ts";
 import { flow, pipe } from "fp-ts/lib/function";
 import * as E from "fp-ts/lib/Either";
 import * as TE from "fp-ts/lib/TaskEither";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
-import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
+import {
+  FiscalCode,
+  NonEmptyString,
+  OrganizationFiscalCode
+} from "@pagopa/ts-commons/lib/strings";
 import { ValidationError } from "../models/error";
 import { withJsonInput } from "../utils/misc";
 import { Dao } from "../models/dao";
@@ -86,9 +91,9 @@ const selectContract = (contracts: ReadonlyArray<IContract>): IContract => {
   );
 };
 
-const retrieveDelegates = (dao: Dao) => (
+const retrieveRawDelegates = (dao: Dao) => (
   contract: IContract
-): TE.TaskEither<Error, IContractWithDelegates> =>
+): TE.TaskEither<Error, ReadonlyArray<unknown>> =>
   pipe(
     TE.tryCatch(
       () =>
@@ -99,20 +104,160 @@ const retrieveDelegates = (dao: Dao) => (
       E.toError
     ),
     // consider only valid delegates
-    TE.map(
-      flow(
-        r => r.resources,
-        RA.map(PecDelegate.decode),
-        RA.filter(E.isRight),
-        RA.map(_ => _.right)
-      )
-    ),
-    TE.map(delegates => ({ ...contract, delegates }))
+    TE.map(r => r.resources)
   );
 
+const hasKey = <K extends string>(
+  obj: unknown,
+  key: K
+): obj is Record<K, unknown> =>
+  obj != null && typeof obj === "object" && key in obj;
+
+// Try to fix delegate data before parsing and validation
+// Add here known patches
+const fixRawDelegates = (
+  records: ReadonlyArray<unknown>
+): ReadonlyArray<unknown> =>
+  records
+    // apply fixes on CODICEFISCALE
+    .map(x =>
+      hasKey(x, "CODICEFISCALE") && typeof x.CODICEFISCALE === "string"
+        ? {
+            ...x,
+            CODICEFISCALE: x.CODICEFISCALE.toUpperCase() /* force uppercase */
+              .replace(/\s/gi, "") /* remove spaces */
+          }
+        : x
+    )
+    // apply fixes on EMAIL
+    .map(x =>
+      hasKey(x, "EMAIL") && typeof x.EMAIL === "string"
+        ? {
+            ...x,
+            EMAIL: x.EMAIL.replace(/\s/gi, "") /* remove spaces */
+          }
+        : x
+    );
+
 // Check if a person with manager role has been declared in at least one of the contracts
-const hasManager = ({ delegates }: IContractWithDelegates): boolean =>
+const hasManager = (delegates: IContractWithDelegates["delegates"]): boolean =>
   delegates.some(d => d.TIPODELEGATO === "Principale");
+
+type DelegatesFailures =
+  | "no-manager"
+  | "no-cf"
+  | "wrong-cf"
+  | "wrong-cf-with-spaces"
+  | "wrong-cf-lowercase"
+  | "organization-cf"
+  | "wrong-email"
+  | "other";
+const parseDelegates = (
+  records: ReadonlyArray<unknown>
+): E.Either<DelegatesFailures, IContractWithDelegates["delegates"]> => {
+  const parsedDelegates = pipe(
+    records,
+    RA.map(PecDelegate.decode),
+    RA.filter(E.isRight),
+    RA.map(_ => _.right)
+  );
+
+  // There is at least a well-formed delegate, and it's manager
+  if (hasManager(parsedDelegates)) {
+    return E.right(parsedDelegates);
+  }
+
+  // Check if there is a malformed manager delegate
+  const malformedManager = pipe(
+    records,
+    RA.map(
+      t.type({
+        TIPODELEGATO: t.literal("Principale")
+      }).decode
+    ),
+    RA.filter(E.isRight),
+    RA.map(_ => _.right)
+  )[0];
+
+  // no manager, even malformed
+  if (!malformedManager) {
+    return E.left("no-manager");
+  }
+
+  // wrong manager fiscal code
+  const managerHasGoodCF = pipe(
+    malformedManager,
+    t.type({
+      CODICEFISCALE: PecDelegate.props.CODICEFISCALE
+    }).decode,
+    E.isRight
+  );
+
+  // let's investigate why fiscal code is not good
+  if (!managerHasGoodCF) {
+    // Some delegate has the organization fiscal code instead of its own
+    const managerHasOrganizationCF = pipe(
+      malformedManager,
+      t.type({
+        CODICEFISCALE: OrganizationFiscalCode
+      }).decode,
+      E.isRight
+    );
+    if (managerHasOrganizationCF) {
+      return E.left("organization-cf");
+    }
+
+    // Some delegate has no fiscal code
+    if (
+      "CODICEFISCALE" in malformedManager &&
+      !malformedManager.CODICEFISCALE
+    ) {
+      return E.left("no-cf");
+    }
+
+    // Some fiscal code has spaces
+    if (
+      "CODICEFISCALE" in malformedManager &&
+      typeof malformedManager.CODICEFISCALE === "string" &&
+      malformedManager.CODICEFISCALE.indexOf(" ") > -1
+    ) {
+      return E.left("wrong-cf-with-spaces");
+    }
+
+    // Some fiscal code is not matched as it's lowercase
+    if (
+      "CODICEFISCALE" in malformedManager &&
+      typeof malformedManager.CODICEFISCALE === "string" &&
+      malformedManager.CODICEFISCALE.match(/[a-z]/)?.length
+    ) {
+      return E.left("wrong-cf-lowercase");
+    }
+
+    // Some fiscal code has simply bad pattern
+    if (
+      "CODICEFISCALE" in malformedManager &&
+      typeof malformedManager.CODICEFISCALE === "string" &&
+      pipe(malformedManager.CODICEFISCALE, FiscalCode.decode, E.isLeft)
+    ) {
+      return E.left("wrong-cf");
+    }
+  }
+
+  // wrong manager fiscal code
+  const managerHasEmail = pipe(
+    malformedManager,
+    t.type({
+      EMAIL: PecDelegate.props.EMAIL
+    }).decode,
+    E.isRight
+  );
+
+  if (!managerHasEmail) {
+    return E.left("wrong-email");
+  }
+
+  return E.left("other");
+};
 
 const formatDelegateNameAndSurname = ({
   NOMINATIVO,
@@ -226,6 +371,35 @@ const markMembershipAsCompleted = (dao: Dao) => (
 ): TE.TaskEither<Error, void> =>
   markMembership(dao)(ipaCode, "Processed", note);
 
+// Format a failure message
+const composeFailureNote = ({ id, attachment }: IContract) => (
+  failure: DelegatesFailures
+): string => {
+  const msg = (note: string): string =>
+    `${note} | contract#${id} attachment#${attachment.id}`;
+  switch (failure) {
+    case "no-cf":
+      return msg("Manager has empty CODICEFISCALE");
+    case "no-manager":
+      return msg("No manager found");
+    case "organization-cf":
+      return msg("Wrong CODICEFISCALE (organization pattern)");
+    case "wrong-cf":
+      return msg("Wrong CODICEFISCALE (bad pattern)");
+    case "wrong-cf-lowercase":
+      return msg("Wrong CODICEFISCALE (lowercase)");
+    case "wrong-cf-with-spaces":
+      return msg("Wrong CODICEFISCALE (has spaces)");
+    case "wrong-email":
+      return msg("Wrong EMAIL");
+    case "other":
+      return msg("Unknown error");
+    default:
+      const _: never = failure;
+      return msg(`Unhandled failure: ${_}`);
+  }
+};
+
 const createHandler = ({
   dao,
   selfcareClient
@@ -251,30 +425,52 @@ const createHandler = ({
             item.ipaCode,
             fetchContractsByIpaCode(dao),
             TE.map(selectContract),
-            TE.chain(retrieveDelegates(dao)),
             TE.map(contract => ({ contract, ...item }))
           )
         ),
 
-        // process membership with its contracts
-        TE.chain(({ contract, ipaCode, fiscalCode }) =>
-          hasManager(contract)
-            ? // only memberships with a manager can be imported
-              pipe(
-                composeSelfCareMembershipClaim(fiscalCode, contract),
-                submitMembershipClaimToSelfcare(selfcareClient),
-                TE.chain(_ =>
-                  markMembershipAsCompleted(dao)(
-                    ipaCode,
-                    `Imported with contract id#${contract.id}`
+        // fetch delegates and apply fix when possible
+        TE.chain(_ =>
+          pipe(
+            _.contract,
+            retrieveRawDelegates(dao),
+            TE.map(fixRawDelegates),
+            TE.map(rawDelegates => ({ ..._, rawDelegates }))
+          )
+        ),
+
+        // Either submit or discard the membership
+        TE.chain(({ fiscalCode, ipaCode, contract, rawDelegates }) =>
+          pipe(
+            // try to parse delegates for the contract
+            // and check there every data we need
+            rawDelegates,
+            parseDelegates,
+
+            E.fold(
+              // When something wrong with delegates, we cannot continue
+              // we mark membership ad discarded (with failure note)
+              flow(composeFailureNote(contract), note =>
+                markMembershipAsDiscarded(dao)(ipaCode, note)
+              ),
+
+              // If delegates satisfy requirements, we can process the membership to selfcare
+              delegates =>
+                pipe(
+                  composeSelfCareMembershipClaim(fiscalCode, {
+                    ...contract,
+                    delegates
+                  }),
+                  submitMembershipClaimToSelfcare(selfcareClient),
+                  TE.chain(_ =>
+                    markMembershipAsCompleted(dao)(
+                      ipaCode,
+                      `Imported with contract id#${contract.id}`
+                    )
                   )
                 )
-              )
-            : // otherwise, we mark the memebership as discarded for future data refinements
-              markMembershipAsDiscarded(dao)(
-                ipaCode,
-                `No manager found for contract id#${contract.id} attachement id#${contract.attachment.id}`
-              )
+            )
+          )
         ),
 
         // return either an empty result or throw an error
