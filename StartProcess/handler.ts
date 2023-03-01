@@ -43,7 +43,7 @@ const composeQuery = (
         { name: "@ipas", value: ipas },
         { name: "@status", value: status }
       ],
-      query: `${baseSql} and d.ipaCode IN @ipaCode`
+      query: `${baseSql} and ARRAY_CONTAINS(@ipas, d.ipaCode)`
     };
   }
   // otherwise we fetch the first elements on the selected status
@@ -95,7 +95,7 @@ export function StartProcess({
     ),
     // limit the number of membership processed
     //   applied only if ipas is not defined
-    RequiredQueryParamMiddleware("limit", withDefault(NumberFromString, 100)),
+    RequiredQueryParamMiddleware("limit", withDefault(NumberFromString, "100")),
     // the processing status of the memebership we query
     //  applied both whe querying by ipa codes or with limit
     RequiredQueryParamMiddleware(
