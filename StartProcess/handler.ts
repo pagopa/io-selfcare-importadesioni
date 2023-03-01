@@ -95,7 +95,7 @@ export function StartProcess({
     ),
     // limit the number of membership processed
     //   applied only if ipas is not defined
-    RequiredQueryParamMiddleware("limit", withDefault(NumberFromString, 100)),
+    RequiredQueryParamMiddleware("limit", withDefault(NumberFromString, "100")),
     // the processing status of the memebership we query
     //  applied both whe querying by ipa codes or with limit
     RequiredQueryParamMiddleware(
