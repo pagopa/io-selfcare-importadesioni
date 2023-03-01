@@ -8,6 +8,9 @@ import * as E from "fp-ts/lib/Either";
 import { pipe } from "fp-ts/lib/function";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 
+import { NumberFromString } from "io-ts-types/lib/NumberFromString";
+import { withDefault } from "@pagopa/ts-commons/lib/types";
+
 const mockContext = ({
   bindings: {
     log: console
@@ -63,4 +66,13 @@ describe("ProcessMembership", () => {
       expect(error).toEqual(expect.any(ValidationError));
     }
   });
+});
+
+it("dsdsds", () => {
+  pipe(
+    undefined,
+    withDefault(NumberFromString, "100" as any).decode,
+    E.mapLeft(readableReport),
+    console.log
+  );
 });
