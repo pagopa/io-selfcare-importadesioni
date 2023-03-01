@@ -43,7 +43,7 @@ const composeQuery = (
         { name: "@ipas", value: ipas },
         { name: "@status", value: status }
       ],
-      query: `${baseSql} and d.ipaCode IN @ipaCode`
+      query: `${baseSql} and ARRAY_CONTAINS(@ipas, d.ipaCode)`
     };
   }
   // otherwise we fetch the first elements on the selected status
