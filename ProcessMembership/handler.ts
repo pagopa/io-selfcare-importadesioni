@@ -371,6 +371,11 @@ const markMembershipAsCompleted = (dao: Dao) => (
 ): TE.TaskEither<Error, void> =>
   markMembership(dao)(ipaCode, "Processed", note);
 
+const markMembershipAsFailed = (dao: Dao) => (
+  ipaCode: IpaCode,
+  note: string
+): TE.TaskEither<Error, void> => markMembership(dao)(ipaCode, "Failed", note);
+
 // Format a failure message
 const composeFailureNote = ({ id, attachment }: IContract) => (
   failure: DelegatesFailures
@@ -462,11 +467,17 @@ const createHandler = ({
                     delegates
                   }),
                   submitMembershipClaimToSelfcare(selfcareClient),
-                  TE.chain(_ =>
-                    markMembershipAsCompleted(dao)(
-                      ipaCode,
-                      `Imported with contract id#${contract.id}`
-                    )
+                  TE.fold(
+                    err =>
+                      markMembershipAsFailed(dao)(
+                        ipaCode,
+                        `${err.message} | contract id#${contract.id}`
+                      ),
+                    _ =>
+                      markMembershipAsCompleted(dao)(
+                        ipaCode,
+                        `Imported with contract id#${contract.id}`
+                      )
                   )
                 )
             )
@@ -474,7 +485,6 @@ const createHandler = ({
         ),
 
         // return either an empty result or throw an error
-        TE.map(_ => void 0),
         TE.getOrElse(err => {
           throw err;
         })
