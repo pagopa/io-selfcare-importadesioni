@@ -321,9 +321,15 @@ const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
   pipe(
     TE.tryCatch(
       () => selfcareClient.contractOnboardingUsingPOST(claim),
-      E.toError
+      _ => new Error(`Failed to connect with Selfcare: ${E.toError(_).message}`)
     ),
-    TE.chain(flow(TE.fromEither, TE.mapLeft(E.toError))),
+    TE.chain(
+      flow(
+        TE.fromEither,
+        TE.mapLeft(readableReport),
+        TE.mapLeft(_ => new Error(`Unhandled response from Selfcare: ${_}`))
+      )
+    ),
     TE.chain(_ =>
       _.status === 201
         ? TE.right(_)
