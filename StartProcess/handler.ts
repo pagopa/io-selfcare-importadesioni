@@ -95,7 +95,15 @@ export function StartProcess({
     ),
     // limit the number of membership processed
     //   applied only if ipas is not defined
-    RequiredQueryParamMiddleware("limit", withDefault(NumberFromString, "100")),
+    RequiredQueryParamMiddleware(
+      "limit",
+      withDefault(
+        NumberFromString,
+        // FIXME: withDefault has a buggy defintion, it expects the output type but it actually uses the input type
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        "100" as any
+      )
+    ),
     // the processing status of the memebership we query
     //  applied both whe querying by ipa codes or with limit
     RequiredQueryParamMiddleware(
