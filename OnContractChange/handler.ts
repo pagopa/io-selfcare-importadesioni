@@ -1,24 +1,25 @@
-import * as t from "io-ts";
-import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
-import { NonNegativeNumber } from "@pagopa/ts-commons/lib/numbers";
 import { Context } from "@azure/functions";
+import { NonNegativeNumber } from "@pagopa/ts-commons/lib/numbers";
+import { NonEmptyString } from "@pagopa/ts-commons/lib/strings";
 import { flow, pipe } from "fp-ts/lib/function";
+import * as t from "io-ts";
 
-import * as TE from "fp-ts/lib/TaskEither";
+import { readableReport } from "@pagopa/ts-commons/lib/reporters";
+import { withDefault } from "@pagopa/ts-commons/lib/types";
 import * as E from "fp-ts/lib/Either";
 import * as O from "fp-ts/lib/Option";
 import * as RA from "fp-ts/lib/ReadonlyArray";
-import { readableReport } from "@pagopa/ts-commons/lib/reporters";
-import { withDefault } from "@pagopa/ts-commons/lib/types";
+import * as TE from "fp-ts/lib/TaskEither";
 import { Dao } from "../models/dao";
 import {
-  ValidationError,
   FetchMembershipError,
-  FiscalCodeNotFoundError,
-  UpsertError,
   FetchPecAttachmentError,
+  FetchPecEmailError,
+  FetchPecSoggettoAggregatoError,
+  FiscalCodeNotFoundError,
   SaveContractError,
-  FetchPecEmailError
+  UpsertError,
+  ValidationError
 } from "../models/error";
 import { ContractVersion } from "../models/types";
 import { FiscalCode, IIpaOpenData, IpaDataReader } from "./ipa";
@@ -77,6 +78,10 @@ type PecAllegato = t.TypeOf<typeof PecAllegato>;
 
 type AttachmentDecoratedPecContract = IpaDecoratedPecContract & {
   readonly attachment: PecAllegato;
+};
+
+type AggregatorDecoratedPecContract = AttachmentDecoratedPecContract & {
+  readonly isAggregator: boolean;
 };
 
 const logMessage = (
@@ -332,8 +337,42 @@ const fetchPecAttachment = (context: Context, dao: Dao) => (
     TE.map(pecAttachment => ({ ...contract, attachment: pecAttachment }))
   );
 
-const saveContract = (context: Context, dao: Dao) => (
+const checkAggregator = (context: Context, dao: Dao) => (
   contract: AttachmentDecoratedPecContract
+): TE.TaskEither<unknown, AggregatorDecoratedPecContract> =>
+  pipe(
+    TE.tryCatch(
+      () =>
+        dao("pecSoggettoAggregato").readItemsByQuery({
+          parameters: [{ name: "@idAllegato", value: contract.IDALLEGATO }],
+          query:
+            "SELECT * FROM pecSoggettoAggregato d WHERE d.IDALLEGATO = @idAllegato"
+        }),
+      flow(
+        error =>
+          `Database fetch pecSoggettoAggregato by IDALLEGATO = '${
+            contract.IDALLEGATO
+          }'. Reason: ${String(error)}`,
+        errorMessage => logMessage(context.log.error, errorMessage),
+        errorMessage => new FetchPecSoggettoAggregatoError(errorMessage)
+      )
+    ),
+    TE.map(response =>
+      pipe(
+        response.resources,
+        O.fromNullable,
+        O.map(items => items.length > 0),
+        O.getOrElse(() => false),
+        isAggregator => ({
+          ...contract,
+          isAggregator
+        })
+      )
+    )
+  );
+
+const saveContract = (context: Context, dao: Dao) => (
+  contract: AggregatorDecoratedPecContract
 ): TE.TaskEither<unknown, void> =>
   pipe(
     TE.tryCatch(
@@ -350,6 +389,7 @@ const saveContract = (context: Context, dao: Dao) => (
           emailDate: contract.DATAEMAIL,
           id: contract.id,
           ipaCode: contract.ipaCode,
+          isAggregator: contract.isAggregator,
           version: contract.TIPOCONTRATTO
         }),
       flow(
@@ -402,6 +442,7 @@ const HandleSingleDocument = (
         TE.chain(
           flow(
             fetchPecAttachment(context, dao),
+            TE.chain(checkAggregator(context, dao)),
             TE.chain(saveContract(context, dao))
           )
         )

@@ -63,6 +63,7 @@ export const IContract = t.type({
   emailDate: NonEmptyString,
   id: NonEmptyString,
   ipaCode: IpaCode,
+  isAggregator: t.boolean,
   version: ContractVersion
 });
 

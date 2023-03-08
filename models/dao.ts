@@ -18,6 +18,7 @@ interface IContainerItemMap {
   readonly pecDelegato: ItemDefinition;
   readonly pecAllegato: ItemDefinition;
   readonly pecEmail: ItemDefinition;
+  readonly pecSoggettoAggregato: ItemDefinition;
 }
 
 // eslint-disable-next-line functional/prefer-readonly-type
