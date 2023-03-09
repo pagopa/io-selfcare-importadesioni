@@ -462,17 +462,6 @@ const OnContractChangeHandler = (
     TE.chain(ipaOpenData =>
       pipe(
         Array.isArray(documents) ? documents : [documents],
-        RA.filter(document =>
-          pipe(
-            ContractVersion.decode(document.TIPOCONTRATTO),
-            E.mapLeft(_ =>
-              context.log.info(
-                `TIPOCONTRATTO = '${document.TIPOCONTRATTO}' not allowed. Skip item!`
-              )
-            ),
-            E.isRight
-          )
-        ),
         RA.map(HandleSingleDocument(context, dao, ipaOpenData)),
         RA.sequence(TE.ApplicativePar)
       )

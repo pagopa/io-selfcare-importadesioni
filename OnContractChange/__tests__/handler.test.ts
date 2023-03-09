@@ -94,25 +94,6 @@ describe("OnContractChange", () => {
     expect(mockDao).toBeCalledTimes(0);
   });
   
-  it.each`
-    tipoContratto
-    ${"Ins. Manuale"}
-    ${null}
-    ${undefined}
-  `
-  ("should skip item: tipoContratto = $tipoContratto", async ({tipoContratto}) => {
-    const document = {...validDocument, TIPOCONTRATTO: tipoContratto};
-    try {
-      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
-        mockContext,
-        document
-      );
-    } catch (error) {
-      fail();
-    }
-    expect(mockDao).toBeCalledTimes(0);
-  });
-
   it("should fail document validation", async () => {
     const document = {...validDocument, CODICEIPA: undefined};
     try {

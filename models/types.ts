@@ -20,6 +20,8 @@ export const MembershipStatus = t.union([
 // The unique version of contract
 export type ContractVersion = t.TypeOf<typeof ContractVersion>;
 export const ContractVersion = t.union([
+  t.null,
+  t.literal("Ins. Manuale"),
   t.literal("V1.0"),
   t.literal("V2.0"),
   t.literal("V2.2(17 giugno)"),
