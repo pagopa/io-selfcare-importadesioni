@@ -60,36 +60,24 @@ const fetchContractsByIpaCode = (dao: Dao) => (
   );
 
 // Given a list of contracts, get the sublist of the ones we should consider in our process
-const selectContract = (contracts: ReadonlyArray<IContract>): IContract => {
-  const orderedVersions = [
-    "V1.0",
-    "V2.0",
-    "V2.2(17 giugno)",
-    "V2.2(29 luglio)",
-    "V2.3"
-  ];
-
-  return (
-    [...contracts] // sort is applied in place, so we clone the array
-      .map(c => ({ ...c, versionNo: orderedVersions.indexOf(c.version) }))
-      // sort contracts array so that the first element is the more relevant
-      .sort((a, b) => {
-        if (a.versionNo > b.versionNo) {
-          return -1; // a is more relevant than b, so it goes first
-        } else if (a.versionNo < b.versionNo) {
-          return 1; // a is less relevant than b, so it goes after
-        }
-        // when version is the same, we choose the latest
-        else if (
-          new Date(a.emailDate).getTime() > new Date(b.emailDate).getTime()
-        ) {
-          return -1; // a is more recent, so it goes first
-        } else {
-          return 1; // a is less recent, so it goes after
-        }
-      })[0]
-  );
-};
+const selectContract = (contracts: ReadonlyArray<IContract>): IContract =>
+  [...contracts] // sort is applied in place, so we clone the array
+    // sort contracts array so that the first element is the more relevant
+    .sort((a, b) => {
+      if (new Date(a.emailDate).getTime() > new Date(b.emailDate).getTime()) {
+        return -1; // a is more recent, so it goes first
+      } else if (
+        new Date(a.emailDate).getTime() < new Date(b.emailDate).getTime()
+      ) {
+        return 1; // a is less recent, so it goes after
+      }
+      // when date is the same, we check file extension
+      else if (a.attachment.name.endsWith(".p7m")) {
+        return -1; // a is a p7m, so it goes first
+      } else {
+        return 1; // a is not a p7m, so it goes after
+      }
+    })[0];
 
 const retrieveRawDelegates = (dao: Dao) => (
   contract: IContract
@@ -297,7 +285,7 @@ const composeSelfcareUser = (input: PecDelegate): UserDto => ({
 });
 
 const composeSelfcareContract = (input: IContract): ImportContractDto => ({
-  contractType: input.version,
+  contractType: input.version ? input.version : "",
   fileName: input.attachment.name,
   filePath: input.attachment.path
 });
@@ -436,6 +424,13 @@ const createHandler = ({
             item.ipaCode,
             fetchContractsByIpaCode(dao),
             TE.map(selectContract),
+            TE.chainEitherK(contract =>
+              pipe(
+                t.string.decode(contract),
+                E.mapLeft(flow(readableReport, E.toError)),
+                E.map(_ => contract)
+              )
+            ),
             TE.map(contract => ({ contract, ...item }))
           )
         ),
