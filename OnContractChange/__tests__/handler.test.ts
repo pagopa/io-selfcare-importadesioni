@@ -93,9 +93,28 @@ describe("OnContractChange", () => {
     expect(result).toHaveLength(0);
     expect(mockDao).toBeCalledTimes(0);
   });
-  
+    
+  it.each`
+    idAllegato
+    ${-1}
+    ${null}
+    ${undefined}
+  `
+  ("should skip item: idAllegato = $idAllegato", async ({idAllegato}) => {
+    const document = {...validDocument, IDALLEGATO: idAllegato};
+    try {
+      await OnContractChangeHandler(mockDao, mockIpaAnyData)(
+        mockContext,
+        document
+      );
+    } catch (error) {
+      fail();
+    }
+    expect(mockDao).toBeCalledTimes(0);
+  });
+
   it("should fail document validation", async () => {
-    const document = {...validDocument, CODICEIPA: undefined};
+    const document = {...validDocument, IDEMAIL: undefined};
     try {
       await OnContractChangeHandler(mockDao, mockIpaAnyData)(
         mockContext,
@@ -209,7 +228,7 @@ describe("OnContractChange", () => {
    it.each`
     fetchAttachmentStatusCode | fetchAttachmentResult                               | errorResultType             | causedBy
     ${404}                    | ${undefined}                                        | ${FetchPecAttachmentError}  | ${"Database error"}
-    ${200}                    | ${({...validPecAttachment, TIPOALLEGATO: "Altro"})} | ${ValidationError}          | ${"result Validation error"}
+    ${200}                    | ${({...validPecAttachment, TIPOALLEGATO: null})}    | ${ValidationError}          | ${"result Validation error"}
    `
    ("should fail to fetch attachments caused by $causedBy", async ({ fetchAttachmentStatusCode, fetchAttachmentResult, errorResultType }) => {
     const document = {...validDocument};

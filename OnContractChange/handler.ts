@@ -26,7 +26,7 @@ import { FiscalCode, IIpaOpenData, IpaDataReader } from "./ipa";
 
 const PecContratto = t.interface({
   CODICEFISCALE: t.union([t.string, t.null]),
-  CODICEIPA: NonEmptyString,
+  CODICEIPA: withDefault(t.string, ""),
   IDALLEGATO: NonNegativeNumber,
   IDEMAIL: NonNegativeNumber,
   TIPOCONTRATTO: ContractVersion,
@@ -69,7 +69,7 @@ const PecAllegato = t.intersection([
   t.type({
     NOMEALLEGATO: NonEmptyString,
     PATHALLEGATO: NonEmptyString,
-    TIPOALLEGATO: t.literal("Contratto"),
+    TIPOALLEGATO: t.union([t.literal("Contratto"), t.literal("Altro")]),
     id: NonEmptyString
   }),
   t.partial({ NOMEALLEGATONUOVO: NonEmptyString })
@@ -462,6 +462,17 @@ const OnContractChangeHandler = (
     TE.chain(ipaOpenData =>
       pipe(
         Array.isArray(documents) ? documents : [documents],
+        RA.filter(document =>
+          pipe(
+            NonNegativeNumber.decode(document.IDALLEGATO),
+            E.mapLeft(_ =>
+              context.log.info(
+                `IDALLEGATO = '${document.IDALLEGATO}' not allowed. Skip item!`
+              )
+            ),
+            E.isRight
+          )
+        ),
         RA.map(HandleSingleDocument(context, dao, ipaOpenData)),
         RA.sequence(TE.ApplicativePar)
       )

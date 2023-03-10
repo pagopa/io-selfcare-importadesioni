@@ -71,6 +71,12 @@ const selectContract = (contracts: ReadonlyArray<IContract>): IContract =>
       ) {
         return 1; // a is less recent, so it goes after
       }
+      // when date is the same, we check the type of attachment
+      else if (a.attachment.kind === "Contratto") {
+        return -1; // a is a Contratto, so it goes first
+      } else if (b.attachment.kind === "Contratto") {
+        return 1; // b is a Contratto, so a it goes after
+      }
       // when date is the same, we check file extension
       else if (a.attachment.name.endsWith(".p7m")) {
         return -1; // a is a p7m, so it goes first
@@ -426,7 +432,14 @@ const createHandler = ({
             TE.map(selectContract),
             TE.chainEitherK(contract =>
               pipe(
-                t.string.decode(contract),
+                t.string.decode(contract.version),
+                E.mapLeft(flow(readableReport, E.toError)),
+                E.map(_ => contract)
+              )
+            ),
+            TE.chainEitherK(contract =>
+              pipe(
+                t.literal("Contratto").decode(contract.attachment.kind),
                 E.mapLeft(flow(readableReport, E.toError)),
                 E.map(_ => contract)
               )

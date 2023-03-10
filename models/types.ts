@@ -53,7 +53,7 @@ export const IMembership = t.intersection([
 export type IAttachment = t.TypeOf<typeof IAttachment>;
 export const IAttachment = t.type({
   id: NonEmptyString,
-  kind: t.literal("Contratto"),
+  kind: t.union([t.literal("Contratto"), t.literal("Altro")]),
   name: NonEmptyString,
   path: NonEmptyString
 });
