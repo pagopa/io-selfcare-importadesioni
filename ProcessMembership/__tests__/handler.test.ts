@@ -39,6 +39,7 @@ const _aContract: IContract = pipe(
     emailDate: "string",
     id: "string",
     ipaCode: "string",
+    isAggregator: false,
     version: aContractVersion
   },
   IContract.decode,

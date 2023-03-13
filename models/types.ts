@@ -20,6 +20,8 @@ export const MembershipStatus = t.union([
 // The unique version of contract
 export type ContractVersion = t.TypeOf<typeof ContractVersion>;
 export const ContractVersion = t.union([
+  t.null,
+  t.literal("Ins. Manuale"),
   t.literal("V1.0"),
   t.literal("V2.0"),
   t.literal("V2.2(17 giugno)"),
@@ -51,7 +53,7 @@ export const IMembership = t.intersection([
 export type IAttachment = t.TypeOf<typeof IAttachment>;
 export const IAttachment = t.type({
   id: NonEmptyString,
-  kind: t.literal("Contratto"),
+  kind: t.union([t.literal("Contratto"), t.literal("Altro")]),
   name: NonEmptyString,
   path: NonEmptyString
 });
@@ -63,6 +65,7 @@ export const IContract = t.type({
   emailDate: NonEmptyString,
   id: NonEmptyString,
   ipaCode: IpaCode,
+  isAggregator: t.boolean,
   version: ContractVersion
 });
 
