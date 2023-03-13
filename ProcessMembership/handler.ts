@@ -71,18 +71,24 @@ const selectContract = (contracts: ReadonlyArray<IContract>): IContract =>
       ) {
         return 1; // a is less recent, so it goes after
       }
-      // when date is the same, we check the type of attachment
-      else if (a.attachment.kind === "Contratto") {
-        return -1; // a is a Contratto, so it goes first
-      } else if (b.attachment.kind === "Contratto") {
-        return 1; // b is a Contratto, so a it goes after
-      }
       // when date is the same, we check file extension
-      else if (a.attachment.name.endsWith(".p7m")) {
-        return -1; // a is a p7m, so it goes first
-      } else {
-        return 1; // a is not a p7m, so it goes after
+      if (a.attachment.name !== b.attachment.name) {
+        if (a.attachment.name.endsWith(".p7m")) {
+          return -1; // a is a p7m, so it goes first
+        } else if (b.attachment.name.endsWith(".p7m")) {
+          return 1; // a is not a p7m, so it goes after
+        }
       }
+      // when file extension is the same, we check the type of attachment
+      if (a.attachment.kind !== b.attachment.kind) {
+        if (a.attachment.kind === "Contratto") {
+          return -1; // a is a Contratto, so it goes first
+        } else if (b.attachment.kind === "Contratto") {
+          return 1; // b is a Contratto, so a it goes after
+        }
+      }
+      // when type of attachment is the same there is no other conditions to check
+      return 0;
     })[0];
 
 const retrieveRawDelegates = (dao: Dao) => (
@@ -433,13 +439,6 @@ const createHandler = ({
             TE.chainEitherK(contract =>
               pipe(
                 t.string.decode(contract.version),
-                E.mapLeft(flow(readableReport, E.toError)),
-                E.map(_ => contract)
-              )
-            ),
-            TE.chainEitherK(contract =>
-              pipe(
-                t.literal("Contratto").decode(contract.attachment.kind),
                 E.mapLeft(flow(readableReport, E.toError)),
                 E.map(_ => contract)
               )
