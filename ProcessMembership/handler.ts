@@ -1,29 +1,32 @@
 /* eslint-disable sonarjs/no-duplicate-string */
-import * as t from "io-ts";
-import { flow, pipe } from "fp-ts/lib/function";
-import * as E from "fp-ts/lib/Either";
-import * as TE from "fp-ts/lib/TaskEither";
-import * as RA from "fp-ts/lib/ReadonlyArray";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import {
   FiscalCode,
   NonEmptyString,
   OrganizationFiscalCode
 } from "@pagopa/ts-commons/lib/strings";
-import { ValidationError } from "../models/error";
-import { withJsonInput } from "../utils/misc";
+import * as E from "fp-ts/lib/Either";
+import { flow, pipe } from "fp-ts/lib/function";
+import * as RA from "fp-ts/lib/ReadonlyArray";
+import * as TE from "fp-ts/lib/TaskEither";
+import * as t from "io-ts";
+import { Json } from "io-ts-types";
+import { ImportContractDto } from "../generated/selfcare/ImportContractDto";
+import { RoleEnum, UserDto } from "../generated/selfcare/UserDto";
 import { Dao } from "../models/dao";
+import { ProcessedMembershipError, ValidationError } from "../models/error";
 import {
   IContract,
   IContractWithDelegates,
   IMembership,
   IpaCode,
   MembershipStatus,
-  PecDelegate
+  PecDelegate,
+  ValidContract,
+  ValidContractVersion
 } from "../models/types";
+import { withJsonInput } from "../utils/misc";
 import { SelfCareClient } from "../utils/selfcare";
-import { RoleEnum, UserDto } from "../generated/selfcare/UserDto";
-import { ImportContractDto } from "../generated/selfcare/ImportContractDto";
 
 export type QueueItem = t.TypeOf<typeof QueueItem>;
 export const QueueItem = t.type({
@@ -92,7 +95,7 @@ const selectContract = (contracts: ReadonlyArray<IContract>): IContract =>
     })[0];
 
 const retrieveRawDelegates = (dao: Dao) => (
-  contract: IContract
+  contract: ValidContract
 ): TE.TaskEither<Error, ReadonlyArray<unknown>> =>
   pipe(
     TE.tryCatch(
@@ -296,6 +299,52 @@ const composeSelfcareUser = (input: PecDelegate): UserDto => ({
   ...formatDelegateNameAndSurname(input)
 });
 
+const inferVersion = (
+  input: IContract
+): E.Either<string, ValidContractVersion> => {
+  if (input.attachment.name.includes("1.0")) {
+    return E.right("V1.0");
+  } else if (input.attachment.name.includes("2.0")) {
+    return E.right("V2.0");
+  } else if (input.attachment.name.includes("2.2_29")) {
+    return E.right("V2.2(29 luglio)");
+  } else if (input.attachment.name.includes("2.2_17")) {
+    return E.right("V2.2(17 giugno)");
+  } else if (input.attachment.name.includes("2.3")) {
+    return E.right("V2.3");
+  } else {
+    if (new Date(input.emailDate).getTime() < new Date(2020, 1, 13).getTime()) {
+      return E.left("V0.x");
+    } else if (
+      new Date(input.emailDate).getTime() < new Date(2020, 2, 20).getTime()
+    ) {
+      return E.right("V1.0");
+    } else if (
+      new Date(input.emailDate).getTime() < new Date(2020, 4, 19).getTime()
+    ) {
+      return E.right("V1.1");
+    } else if (
+      new Date(input.emailDate).getTime() < new Date(2020, 5, 9).getTime()
+    ) {
+      return E.right("V2.0");
+    } else if (
+      new Date(input.emailDate).getTime() < new Date(2020, 5, 17).getTime()
+    ) {
+      return E.right("V2.1");
+    } else if (
+      new Date(input.emailDate).getTime() < new Date(2020, 6, 29).getTime()
+    ) {
+      return E.right("V2.2(17 giugno)");
+    } else if (
+      new Date(input.emailDate).getTime() < new Date(2021, 0, 20).getTime()
+    ) {
+      return E.right("V2.2(29 luglio)");
+    } else {
+      return E.right("V2.3");
+    }
+  }
+};
+
 const composeSelfcareContract = (input: IContract): ImportContractDto => ({
   contractType: input.version ? input.version : "",
   fileName: input.attachment.name,
@@ -383,7 +432,7 @@ const markMembershipAsFailed = (dao: Dao) => (
 ): TE.TaskEither<Error, void> => markMembership(dao)(ipaCode, "Failed", note);
 
 // Format a failure message
-const composeFailureNote = ({ id, attachment }: IContract) => (
+const composeFailureNote = ({ id, attachment }: ValidContract) => (
   failure: DelegatesFailures
 ): string => {
   const msg = (note: string): string =>
@@ -411,6 +460,39 @@ const composeFailureNote = ({ id, attachment }: IContract) => (
   }
 };
 
+const parseIncomingMessage = (
+  queueItem: Json
+): E.Either<ValidationError, QueueItem> =>
+  pipe(
+    queueItem,
+    QueueItem.decode,
+    E.mapLeft(flow(readableReport, _ => new ValidationError(_)))
+  );
+
+const checkVersion = (
+  contract: IContract
+): E.Either<ValidationError, ValidContract> =>
+  pipe(
+    contract.version,
+    ValidContractVersion.decode,
+    E.fold(
+      _ =>
+        pipe(
+          contract,
+          inferVersion,
+          E.mapLeft(
+            invalidVersion =>
+              new ProcessedMembershipError(
+                contract.ipaCode,
+                `Version '${invalidVersion}' is not allowed | contract id#${contract.id}`
+              )
+          )
+        ),
+      validVersion => E.right(validVersion)
+    ),
+    E.map(v => ({ ...contract, version: v }))
+  );
+
 const createHandler = ({
   dao,
   selfcareClient
@@ -418,91 +500,87 @@ const createHandler = ({
   readonly dao: Dao;
   readonly selfcareClient: SelfCareClient;
 }): ReturnType<typeof withJsonInput> =>
-  pipe(
-    withJsonInput((_context, queueItem) =>
-      pipe(
-        // parse incoming message
+  withJsonInput((_context, queueItem) =>
+    pipe(
+      queueItem,
+      parseIncomingMessage,
+      TE.fromEither,
+      // fetch all contracts
+      // and filter only valid ones
+      TE.chain(item =>
         pipe(
-          queueItem,
-          QueueItem.decode,
-          E.mapLeft(flow(readableReport, _ => new ValidationError(_))),
-          TE.fromEither
-        ),
+          item.ipaCode,
+          fetchContractsByIpaCode(dao),
+          TE.map(selectContract),
+          TE.chainEitherK(flow(checkVersion)),
+          TE.map(contract => ({ contract, ...item }))
+        )
+      ),
 
-        // fetch all contracts
-        // and filter only valid ones
-        TE.chain(item =>
-          pipe(
-            item.ipaCode,
-            fetchContractsByIpaCode(dao),
-            TE.map(selectContract),
-            TE.chainEitherK(contract =>
-              pipe(
-                t.string.decode(contract.version),
-                E.mapLeft(flow(readableReport, E.toError)),
-                E.map(_ => contract)
-              )
-            ),
-            TE.map(contract => ({ contract, ...item }))
-          )
-        ),
-
+      TE.chain(contractWithItem =>
         // fetch delegates and apply fix when possible
-        TE.chain(_ =>
-          pipe(
-            _.contract,
-            retrieveRawDelegates(dao),
-            TE.map(fixRawDelegates),
-            TE.map(rawDelegates => ({ ..._, rawDelegates }))
-          )
-        ),
+        pipe(
+          contractWithItem.contract,
+          retrieveRawDelegates(dao),
+          TE.map(fixRawDelegates),
+          TE.map(rawDelegates => ({ ...contractWithItem, rawDelegates })),
 
-        // Either submit or discard the membership
-        TE.chain(({ fiscalCode, ipaCode, contract, rawDelegates }) =>
-          pipe(
-            // try to parse delegates for the contract
-            // and check there every data we need
-            rawDelegates,
-            parseDelegates,
+          // Either submit or discard the membership
+          TE.chain(({ fiscalCode, ipaCode, contract, rawDelegates }) =>
+            pipe(
+              // try to parse delegates for the contract
+              // and check there every data we need
+              rawDelegates,
+              parseDelegates,
 
-            E.fold(
-              // When something wrong with delegates, we cannot continue
-              // we mark membership ad discarded (with failure note)
-              flow(composeFailureNote(contract), note =>
-                markMembershipAsDiscarded(dao)(ipaCode, note)
-              ),
+              E.fold(
+                // When something wrong with delegates, we cannot continue
+                // we mark membership ad discarded (with failure note)
+                flow(composeFailureNote(contract), note =>
+                  markMembershipAsDiscarded(dao)(ipaCode, note)
+                ),
 
-              // If delegates satisfy requirements, we can process the membership to selfcare
-              delegates =>
-                pipe(
-                  composeSelfCareMembershipClaim(fiscalCode, {
-                    ...contract,
-                    delegates
-                  }),
-                  submitMembershipClaimToSelfcare(selfcareClient),
-                  TE.fold(
-                    err =>
-                      markMembershipAsFailed(dao)(
-                        ipaCode,
-                        `${err.message} | contract id#${contract.id}`
-                      ),
-                    _ =>
-                      markMembershipAsCompleted(dao)(
-                        ipaCode,
-                        `Imported with contract id#${contract.id}`
-                      )
+                // If delegates satisfy requirements, we can process the membership to selfcare
+                delegates =>
+                  pipe(
+                    composeSelfCareMembershipClaim(fiscalCode, {
+                      ...contract,
+                      delegates
+                    }),
+                    submitMembershipClaimToSelfcare(selfcareClient),
+                    TE.fold(
+                      err =>
+                        markMembershipAsFailed(dao)(
+                          ipaCode,
+                          `${err.message} | contract id#${contract.id}`
+                        ),
+                      _ =>
+                        markMembershipAsCompleted(dao)(
+                          ipaCode,
+                          `Imported with contract id#${contract.id}`
+                        )
+                    )
                   )
-                )
+              )
             )
           )
-        ),
+        )
+      ),
+      // handle persistent error
+      TE.fold(
+        error =>
+          error instanceof ProcessedMembershipError
+            ? markMembershipAsFailed(dao)(error.ipaCode, error.message)
+            : TE.left(error),
+        _ => TE.right(_)
+      ),
 
-        // return either an empty result or throw an error
-        TE.getOrElse(err => {
-          throw err;
-        })
-      )()
-    )
+      // return either an empty result or throw an error
+      TE.getOrElse(error => {
+        throw error;
+      }),
+      Z => Z
+    )()
   );
 
 export default createHandler;
