@@ -570,7 +570,7 @@ const createHandler = ({
       TE.fold(
         error =>
           error instanceof ProcessedMembershipError
-            ? markMembershipAsFailed(dao)(error.ipaCode, error.message)
+            ? markMembershipAsDiscarded(dao)(error.ipaCode, error.message)
             : TE.left(error),
         _ => TE.right(_)
       ),
