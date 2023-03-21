@@ -314,7 +314,7 @@ const fetchPecAttachment = (context: Context, dao: Dao) => (
         response => response.statusCode >= 200 && response.statusCode < 300,
         flow(
           response =>
-            `Database find pecAllegato by id = '${contract.IDALLEGATO}'. Reason: status code = '${response.statusCode}'`,
+            `Database find pecAllegato by id = '${contract.IDALLEGATO} for contract id = '${contract.id}'. Reason: status code = '${response.statusCode}'`,
           errorMessage => logMessage(context.log.error, errorMessage),
           errorMessage => new FetchPecAttachmentError(errorMessage)
         )
@@ -352,7 +352,7 @@ const checkAggregator = (context: Context, dao: Dao) => (
         error =>
           `Database fetch pecSoggettoAggregato by IDALLEGATO = '${
             contract.IDALLEGATO
-          }'. Reason: ${String(error)}`,
+          }' for contract id = '${contract.id}'. Reason: ${String(error)}`,
         errorMessage => logMessage(context.log.error, errorMessage),
         errorMessage => new FetchPecSoggettoAggregatoError(errorMessage)
       )
@@ -428,6 +428,10 @@ const HandleSingleDocument = (
     E.mapLeft(
       errors => new ValidationError(`PecContratto: ${readableReport(errors)}`)
     ),
+    E.map(contract => {
+      context.log.info(`Processing contract with id = ${contract.id}`);
+      return contract;
+    }),
     TE.fromEither,
     TE.chain(
       flow(
