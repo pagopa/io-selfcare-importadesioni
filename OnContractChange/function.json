@@ -10,8 +10,15 @@
       "collectionName": "%COSMOSDB_PEC_CONTRACTS_COLLECTION%",
       "leaseCollectionName": "%COSMOSDB_PEC_CONTRACTS_LEASE_COLLECTION%",
       "createLeaseCollectionIfNotExists": true,
-      "startFromBeginning": true
+      "startFromBeginning": true,
+      "maxItemsPerInvocation": 30
     }
   ],
+  "retry": {
+    "strategy": "exponentialBackoff",
+    "maxRetryCount": 10,
+    "minimumInterval": "00:00:05",
+    "maximumInterval": "00:01:00"
+  },
   "scriptFile": "../dist/OnContractChange/index.js"
 }

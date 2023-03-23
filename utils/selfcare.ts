@@ -1,7 +1,7 @@
 import nodeFetch from "node-fetch";
 import {
-  createClient as createClientBase,
-  Client
+  Client,
+  createClient as createClientBase
 } from "../generated/selfcare/client";
 
 type Prettify<T> = {
@@ -15,8 +15,10 @@ export type SelfCareClient = Prettify<Client<"apiKeyHeader">>;
 const f = async (
   ...[a, b]: Parameters<typeof nodeFetch>
 ): ReturnType<typeof nodeFetch> => {
+  // eslint-disable-next-line no-console
   console.log("--->", a, b);
   const r = await nodeFetch(a, b);
+  // eslint-disable-next-line no-console
   console.log("+++++", r.status);
   return r;
 };

@@ -20,8 +20,13 @@ export const MembershipStatus = t.union([
 // The unique version of contract
 export type ContractVersion = t.TypeOf<typeof ContractVersion>;
 export const ContractVersion = t.union([
+  t.null,
+  t.literal("Ins. Manuale"),
+  t.literal("V0.x"),
   t.literal("V1.0"),
+  t.literal("V1.1"),
   t.literal("V2.0"),
+  t.literal("V2.1"),
   t.literal("V2.2(17 giugno)"),
   t.literal("V2.2(29 luglio)"),
   t.literal("V2.3")
@@ -51,7 +56,7 @@ export const IMembership = t.intersection([
 export type IAttachment = t.TypeOf<typeof IAttachment>;
 export const IAttachment = t.type({
   id: NonEmptyString,
-  kind: t.literal("Contratto"),
+  kind: t.union([t.literal("Contratto"), t.literal("Altro")]),
   name: NonEmptyString,
   path: NonEmptyString
 });
@@ -63,6 +68,7 @@ export const IContract = t.type({
   emailDate: NonEmptyString,
   id: NonEmptyString,
   ipaCode: IpaCode,
+  isAggregator: t.boolean,
   version: ContractVersion
 });
 
@@ -77,10 +83,31 @@ export const PecDelegate = t.interface({
   id: NonEmptyString
 });
 
+export type ValidContractVersion = t.TypeOf<typeof ValidContractVersion>;
+// match all but "0.x"
+// const ValidContractVersion = PatternString("^(?!(V0.x)$).*$");
+export const ValidContractVersion = t.union([
+  t.literal("V1.0"),
+  t.literal("V1.1"),
+  t.literal("V2.0"),
+  t.literal("V2.1"),
+  t.literal("V2.2(17 giugno)"),
+  t.literal("V2.2(29 luglio)"),
+  t.literal("V2.3")
+]);
+
+export type ValidContract = t.TypeOf<typeof ValidContract>;
+export const ValidContract = t.intersection([
+  IContract,
+  t.type({
+    version: ValidContractVersion
+  })
+]);
+
 // Enrich contract with relative delegates
 export type IContractWithDelegates = t.TypeOf<typeof IContractWithDelegates>;
 export const IContractWithDelegates = t.intersection([
-  IContract,
+  ValidContract,
   t.type({
     delegates: t.readonlyArray(PecDelegate)
   })
