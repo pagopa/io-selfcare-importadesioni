@@ -348,7 +348,8 @@ const inferVersion = (
 const composeSelfcareContract = (input: IContract): ImportContractDto => ({
   contractType: input.version ? input.version : "",
   fileName: input.attachment.name,
-  filePath: input.attachment.path
+  filePath: input.attachment.path,
+  onboardingDate: new Date(input.emailDate)
 });
 
 // Prepare data to be sent to SelfCare
