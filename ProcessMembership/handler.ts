@@ -367,7 +367,7 @@ const composeSelfCareMembershipClaim = (
 // Submit the claim to SelfCare to import the memebership
 const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
   claim: SelfCareMembershipClaimParams
-): TE.TaskEither<Error, void> =>
+): TE.TaskEither<Error, string> =>
   pipe(
     TE.tryCatch(
       () => selfcareClient.contractOnboardingUsingPOST(claim),
@@ -381,11 +381,15 @@ const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
       )
     ),
     TE.chain(_ =>
-      _.status === 201
+      _.status === 201 || _.status === 409
         ? TE.right(_)
         : TE.left(new Error(`Selfcare responded ${_.status}`))
     ),
-    TE.map(_ => void 0)
+    TE.map(_ =>
+      _.status === 409
+        ? "Successful imported (already onboarded)"
+        : "Successful imported"
+    )
   );
 
 // Save that the memebeship is not meant to be processed by the current business logic
@@ -555,10 +559,10 @@ const createHandler = ({
                           ipaCode,
                           `${err.message} | contract id#${contract.id}`
                         ),
-                      _ =>
+                      successMessage =>
                         markMembershipAsCompleted(dao)(
                           ipaCode,
-                          `Imported with contract id#${contract.id}`
+                          `${successMessage} | contract id#${contract.id}`
                         )
                     )
                   )
