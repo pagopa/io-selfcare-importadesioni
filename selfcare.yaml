@@ -4,14 +4,14 @@ info:
   description: Onboarding API for PA only for io product
   version: v1
 servers:
-  - url: https://api.uat.selfcare.pagopa.it/external/onboarding/v1
+  - url: https://api.uat.selfcare.pagopa.it/external/onboarding-io/v1
 paths:
   '/onboarding/{externalInstitutionId}':
     post:
       tags:
         - onboarding
       summary: contractOnboarding
-      description: The service allows the import of institutions' contracts
+      description: The service allows the import of old institutions' contracts
       operationId: contractOnboardingUsingPOST
       parameters:
         - name: externalInstitutionId
@@ -30,6 +30,7 @@ paths:
                 contractType: string
                 fileName: string
                 filePath: string
+                onboardingDate: string
               users:
                 - email: email@example.com
                   name: string
@@ -69,8 +70,8 @@ paths:
                 status: 500
                 title: string
                 type: string
-        '500':
-          description: Internal Server Error
+        '403':
+          description: Forbidden
           content:
             application/problem+json:
               schema:
@@ -84,87 +85,8 @@ paths:
                 status: 500
                 title: string
                 type: string
-  '/onboarding/{externalInstitutionId}/products/{productId}':
-    post:
-      tags:
-        - onboarding
-      summary: autoApprovalOnboarding
-      description: The service allows the onboarding of institutions with auto approval
-      operationId: autoApprovalOnboardingUsingPOST
-      parameters:
-        - name: externalInstitutionId
-          in: path
-          description: Institution's unique external identifier
-          required: true
-          schema:
-            type: string
-        - name: productId
-          in: path
-          description: Product's unique identifier
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OnboardingDto'
-            example:
-              assistanceContacts:
-                supportEmail: email@example.com
-                supportPhone: string
-              billingData:
-                businessName: string
-                digitalAddress: string
-                publicServices: false
-                recipientCode: string
-                registeredOffice: string
-                taxCode: string
-                vatNumber: string
-                zipCode: string
-              companyInformations: { }
-              geographicTaxonomies:
-                - code: string
-                  desc: string
-              institutionType: GSP
-              origin: string
-              pricingPlan: string
-              pspData:
-                abiCode: string
-                businessRegisterNumber: string
-                dpoData:
-                  address: string
-                  email: email@example.com
-                  pec: email@example.com
-                legalRegisterName: string
-                legalRegisterNumber: string
-                vatNumberGroup: false
-              users:
-                - email: email@example.com
-                  name: string
-                  role: DELEGATE
-                  surname: string
-                  taxCode: string
-      responses:
-        '201':
-          description: Created
-        '400':
-          description: Bad Request
-          content:
-            application/problem+json:
-              schema:
-                $ref: '#/components/schemas/Problem'
-              example:
-                detail: string
-                instance: string
-                invalidParams:
-                  - name: string
-                    reason: string
-                status: 500
-                title: string
-                type: string
-        '401':
-          description: Unauthorized
+        '409':
+          description: Conflict
           content:
             application/problem+json:
               schema:
@@ -195,105 +117,28 @@ paths:
                 type: string
 components:
   schemas:
-    AssistanceContactsDto:
-      title: AssistanceContactsDto
-      type: object
-      properties:
-        supportEmail:
-          type: string
-          description: Institution's support email contact
-          format: email
-          example: email@example.com
-        supportPhone:
-          type: string
-          description: Institution's support phone contact
-    BillingDataDto:
-      title: BillingDataDto
-      required:
-        - businessName
-        - digitalAddress
-        - recipientCode
-        - registeredOffice
-        - taxCode
-        - vatNumber
-        - zipCode
-      type: object
-      properties:
-        businessName:
-          type: string
-          description: Institution's legal name
-        digitalAddress:
-          type: string
-          description: Institution's digitalAddress
-        publicServices:
-          type: boolean
-          description: Institution's service type
-          example: false
-        recipientCode:
-          type: string
-          description: Billing recipient code
-        registeredOffice:
-          type: string
-          description: Institution's physical address
-        taxCode:
-          type: string
-          description: Institution's taxCode
-        vatNumber:
-          type: string
-          description: Institution's VAT number
-        zipCode:
-          type: string
-          description: Institution's zipCode
-    CompanyInformationsDto:
-      title: CompanyInformationsDto
-      type: object
-    DpoDataDto:
-      title: DpoDataDto
-      required:
-        - address
-        - email
-        - pec
-      type: object
-      properties:
-        address:
-          type: string
-          description: DPO's address
-        email:
-          type: string
-          description: DPO's email
-          format: email
-          example: email@example.com
-        pec:
-          type: string
-          description: DPO's PEC
-          format: email
-          example: email@example.com
-    GeographicTaxonomyDto:
-      title: GeographicTaxonomyDto
-      required:
-        - code
-        - desc
-      type: object
-      properties:
-        code:
-          type: string
-          description: Institution's geographic taxonomy ISTAT code
-        desc:
-          type: string
-          description: Institution's geographic taxonomy extended name
     ImportContractDto:
       title: ImportContractDto
+      required:
+        - contractType
+        - fileName
+        - filePath
+        - onboardingDate
       type: object
       properties:
         contractType:
           type: string
-          description: Institution's contract version
+          description: Institution's old contract version
         fileName:
           type: string
-          description: Institution's contract file name
+          description: Institution's old contract file name
         filePath:
           type: string
-          description: Institution's contract file path
+          description: Institution's old contract file path
+        onboardingDate:
+          type: string
+          description: Institution's old onboarding date in the format 2007-12-03T10:15:30+01:00 (YYYY-MM-DD-T-HH:mm:ss+UTC)
+          format: date-time
     InvalidParam:
       title: InvalidParam
       required:
@@ -307,51 +152,10 @@ components:
         reason:
           type: string
           description: Invalid parameter reason.
-    OnboardingDto:
-      title: OnboardingDto
-      required:
-        - billingData
-        - geographicTaxonomies
-        - institutionType
-        - users
-      type: object
-      properties:
-        assistanceContacts:
-          $ref: '#/components/schemas/AssistanceContactsDto'
-        billingData:
-          $ref: '#/components/schemas/BillingDataDto'
-        companyInformations:
-          $ref: '#/components/schemas/CompanyInformationsDto'
-        geographicTaxonomies:
-          type: array
-          items:
-            $ref: '#/components/schemas/GeographicTaxonomyDto'
-          description: Institution's geographic taxonomy
-        institutionType:
-          enum:
-            - GSP
-            - PA
-            - PSP
-            - PT
-            - SCP
-          type: string
-          description: Institution's type
-        origin:
-          type: string
-          description: Institution data origin
-        pricingPlan:
-          type: string
-          description: Product's pricing plan
-        pspData:
-          $ref: '#/components/schemas/PspDataDto'
-        users:
-          type: array
-          items:
-            $ref: '#/components/schemas/UserDto'
-          description: List of onboarding users
     OnboardingImportDto:
       title: OnboardingImportDto
       required:
+        - importContract
         - users
       type: object
       properties:
@@ -392,35 +196,6 @@ components:
           type: string
           description: A URL to a page with more details regarding the problem.
       description: A "problem detail" as a way to carry machine-readable details of errors (https://datatracker.ietf.org/doc/html/rfc7807)
-    PspDataDto:
-      title: PspDataDto
-      required:
-        - abiCode
-        - businessRegisterNumber
-        - dpoData
-        - legalRegisterName
-        - legalRegisterNumber
-        - vatNumberGroup
-      type: object
-      properties:
-        abiCode:
-          type: string
-          description: PSP's ABI code
-        businessRegisterNumber:
-          type: string
-          description: PSP's Business Register number
-        dpoData:
-          $ref: '#/components/schemas/DpoDataDto'
-        legalRegisterName:
-          type: string
-          description: PSP's legal register name
-        legalRegisterNumber:
-          type: string
-          description: PSP's legal register number
-        vatNumberGroup:
-          type: boolean
-          description: PSP's Vat Number group
-          example: false
     UserDto:
       title: UserDto
       required:
