@@ -193,7 +193,9 @@ const getIpaCode = (
       )
     ),
     O.fromNullable,
-    O.getOrElse(() => contract.CODICEIPA.toLowerCase())
+    O.getOrElse(() =>
+      contract.CODICEIPA ? contract.CODICEIPA.toLowerCase() : "null"
+    )
   );
 
 const decorateFromIPA = (context: Context, ipaOpenData: IIpaOpenData) => (
@@ -234,7 +236,9 @@ const fetchMembership = (context: Context, dao: Dao) => (
         error =>
           `Database find relationship by id for codiceIPA = '${
             contract.ipaCode
-          }' failed. Reason: ${String(error)}`,
+          }' and contractId = '${contract.id}' failed failed. Reason: ${String(
+            error
+          )}`,
         errorMessage => logMessage(context.log.error, errorMessage),
         errorMessage => new FetchMembershipError(errorMessage)
       )
@@ -245,7 +249,7 @@ const fetchMembership = (context: Context, dao: Dao) => (
         statusCode => statusCode === 200 || statusCode === 404,
         flow(
           statusCode =>
-            `Database find relationship by id for codiceIPA = '${contract.ipaCode}' failed. Reason: status code = '${statusCode}'`,
+            `Database find relationship by id for codiceIPA = '${contract.ipaCode}' and contractId = '${contract.id}' failed failed. Reason: status code = '${statusCode}'`,
           errorMessage => logMessage(context.log.error, errorMessage),
           errorMessage => new FetchMembershipError(errorMessage)
         )
