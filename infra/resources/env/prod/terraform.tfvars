@@ -9,6 +9,9 @@ tags = {
   CostCenter  = "TS310 - PAGAMENTI & SERVIZI"
 }
 
+## Selfcare
+selfcare_url = "https://api.selfcare.pagopa.it/external/onboarding-io/v1"
+
 ## Network
 vnet_common_rg = "io-p-rg-common"
 vnet_name      = "io-p-vnet-common"
