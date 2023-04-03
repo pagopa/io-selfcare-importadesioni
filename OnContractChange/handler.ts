@@ -482,7 +482,7 @@ const OnContractChangeHandler = (
           )
         ),
         RA.map(HandleSingleDocument(context, dao, ipaOpenData)),
-        RA.sequence(TE.ApplicativePar)
+        RA.sequence(TE.ApplicativeSeq)
       )
     ),
     TE.getOrElse(err => {
