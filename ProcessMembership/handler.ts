@@ -1,4 +1,5 @@
 /* eslint-disable sonarjs/no-duplicate-string */
+import { Context } from "@azure/functions";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
 import {
   FiscalCode,
@@ -6,9 +7,9 @@ import {
   OrganizationFiscalCode
 } from "@pagopa/ts-commons/lib/strings";
 import * as E from "fp-ts/lib/Either";
-import { flow, pipe } from "fp-ts/lib/function";
 import * as RA from "fp-ts/lib/ReadonlyArray";
 import * as TE from "fp-ts/lib/TaskEither";
+import { flow, pipe } from "fp-ts/lib/function";
 import * as t from "io-ts";
 import { Json } from "io-ts-types";
 import { ImportContractDto } from "../generated/selfcare/ImportContractDto";
@@ -375,9 +376,9 @@ const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
     ),
     TE.chain(
       flow(
-        TE.fromEither,
-        TE.mapLeft(readableReport),
-        TE.mapLeft(_ => new Error(`Unhandled response from Selfcare: ${_}`))
+        E.mapLeft(readableReport),
+        E.mapLeft(_ => new Error(`Unhandled response from Selfcare: ${_}`)),
+        TE.fromEither
       )
     ),
     TE.chain(_ =>
@@ -418,11 +419,14 @@ const markMembership = (dao: Dao) => (
   );
 
 // Save that the memebeship is not meant to be processed by the current business logic
-const markMembershipAsDiscarded = (dao: Dao) => (
+const markMembershipAsDiscarded = (context: Context, dao: Dao) => (
   ipaCode: IpaCode,
   note: string
 ): TE.TaskEither<Error, void> =>
-  markMembership(dao)(ipaCode, "Discarded", note);
+  pipe(
+    markMembership(dao)(ipaCode, "Discarded", note),
+    TE.map(_ => context.log.error(note))
+  );
 
 // Save that the memebeship has been correctly claimed to SelfCare
 const markMembershipAsCompleted = (dao: Dao) => (
@@ -431,10 +435,14 @@ const markMembershipAsCompleted = (dao: Dao) => (
 ): TE.TaskEither<Error, void> =>
   markMembership(dao)(ipaCode, "Processed", note);
 
-const markMembershipAsFailed = (dao: Dao) => (
+const markMembershipAsFailed = (context: Context, dao: Dao) => (
   ipaCode: IpaCode,
   note: string
-): TE.TaskEither<Error, void> => markMembership(dao)(ipaCode, "Failed", note);
+): TE.TaskEither<Error, void> =>
+  pipe(
+    markMembership(dao)(ipaCode, "Failed", note),
+    TE.map(_ => context.log.error(note))
+  );
 
 // Format a failure message
 const composeFailureNote = ({ id, attachment }: ValidContract) => (
@@ -505,7 +513,7 @@ const createHandler = ({
   readonly dao: Dao;
   readonly selfcareClient: SelfCareClient;
 }): ReturnType<typeof withJsonInput> =>
-  withJsonInput((_context, queueItem) =>
+  withJsonInput((context, queueItem) =>
     pipe(
       queueItem,
       parseIncomingMessage,
@@ -542,7 +550,7 @@ const createHandler = ({
                 // When something wrong with delegates, we cannot continue
                 // we mark membership ad discarded (with failure note)
                 flow(composeFailureNote(contract), note =>
-                  markMembershipAsDiscarded(dao)(ipaCode, note)
+                  markMembershipAsDiscarded(context, dao)(ipaCode, note)
                 ),
 
                 // If delegates satisfy requirements, we can process the membership to selfcare
@@ -555,7 +563,7 @@ const createHandler = ({
                     submitMembershipClaimToSelfcare(selfcareClient),
                     TE.fold(
                       err =>
-                        markMembershipAsFailed(dao)(
+                        markMembershipAsFailed(context, dao)(
                           ipaCode,
                           `${err.message} | contract id#${contract.id}`
                         ),
@@ -575,7 +583,10 @@ const createHandler = ({
       TE.fold(
         error =>
           error instanceof ProcessedMembershipError
-            ? markMembershipAsDiscarded(dao)(error.ipaCode, error.message)
+            ? markMembershipAsDiscarded(context, dao)(
+                error.ipaCode,
+                error.message
+              )
             : TE.left(error),
         _ => TE.right(_)
       ),
@@ -583,8 +594,7 @@ const createHandler = ({
       // return either an empty result or throw an error
       TE.getOrElse(error => {
         throw error;
-      }),
-      Z => Z
+      })
     )()
   );
 
