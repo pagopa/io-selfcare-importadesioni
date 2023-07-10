@@ -94,14 +94,14 @@ module "functions_app" {
     SELFCARE_URL = var.selfcare_url
     SELFCARE_KEY = "any-key"
 
-    "AzureWebJobs.OnContractChange.Disabled" = var.env_short == "p" ? "1" : "0" # only enable prod for now
+    "AzureWebJobs.OnContractChange.Disabled" = var.env_short == "p" ? "1" : "0" # disable prod for now
   }
 
   subnet_id = module.app_snet.id
 
   allowed_subnets = [module.app_snet.id]
 
-  application_insights_instrumentation_key = data.azurerm_application_insights.application_insights.instrumentation_key
+  application_insights_instrumentation_key = azurerm_application_insights.application_insights.instrumentation_key
 
   tags = var.tags
 }
