@@ -25,5 +25,9 @@ functions_autoscale_minimum = 1
 functions_autoscale_maximum = 3
 functions_autoscale_default = 1
 
-cosmos_private_endpoint_enabled = false
+cosmos_private_endpoint_enabled      = false
 cosmos_public_network_access_enabled = true
+
+# Monitoring
+application_insights_name    = "io-d-ai-common"
+application_insights_rg_name = "io-d-rg-common"

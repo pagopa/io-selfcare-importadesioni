@@ -1,4 +1,17 @@
+# Application insights
+
+variable "application_insights_name" {
+  type        = string
+  description = "Application Insight instance name"
+  default     = null
+}
+variable "application_insights_rg_name" {
+  type        = string
+  description = "Application Insight resource group name"
+  default     = null
+}
+
 data "azurerm_application_insights" "application_insights" {
-  name                = format("%s-%s-fn", local.project, var.application_basename)
-  resource_group_name = azurerm_resource_group.rg.name
+  name                = var.application_insights_name
+  resource_group_name = var.application_insights_rg_name
 }
