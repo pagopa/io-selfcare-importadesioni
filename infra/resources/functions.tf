@@ -101,7 +101,7 @@ module "functions_app" {
 
   allowed_subnets = [module.app_snet.id]
 
-  application_insights_instrumentation_key = azurerm_application_insights.application_insights.instrumentation_key
+  application_insights_instrumentation_key = data.azurerm_application_insights.application_insights.instrumentation_key
 
   tags = var.tags
 }
