@@ -33,7 +33,7 @@ data "azurerm_virtual_network" "vnet_common" {
 }
 
 data "azurerm_subnet" "private_endpoints_subnet" {
-  count = var.env_short == "p" ? 1 : 0
+  count = local.is_prod ? 1 : 0
 
   name                 = "pendpoints"
   virtual_network_name = var.vnet_name
@@ -41,7 +41,7 @@ data "azurerm_subnet" "private_endpoints_subnet" {
 }
 
 data "azurerm_private_dns_zone" "privatelink_documents_azure_com" {
-  count = var.env_short == "p" ? 1 : 0
+  count = local.is_prod ? 1 : 0
 
   name                = "privatelink.documents.azure.com"
   resource_group_name = var.vnet_common_rg
