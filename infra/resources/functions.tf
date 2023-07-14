@@ -93,8 +93,6 @@ module "functions_app" {
     # Selfcare connection
     SELFCARE_URL = var.selfcare_url
     SELFCARE_KEY = data.azurerm_key_vault_secret.selfcare_apikey.value
-
-    "AzureWebJobs.OnContractChange.Disabled" = var.env_short == "p" ? "1" : "0" # disable prod for now
   }
 
   subnet_id = module.app_snet.id
