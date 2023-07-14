@@ -31,3 +31,7 @@ cosmos_public_network_access_enabled = false
 # Monitoring
 application_insights_name    = "io-p-ai-common"
 application_insights_rg_name = "io-p-rg-common"
+
+# Key Vault
+key_vault_name    = "io-p-kv-common"
+key_vault_rg_name = "io-p-rg-common"

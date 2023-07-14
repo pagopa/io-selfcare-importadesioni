@@ -10,7 +10,7 @@ tags = {
 }
 
 ## Selfcare
-selfcare_url = "https://io-d-importadesioni-fn.azurewebsites.net/api/v1"
+selfcare_url = "https://api.uat.selfcare.pagopa.it/external/onboarding-io/v1"
 
 ## Network
 vnet_common_rg = "io-d-rg-common"
@@ -31,3 +31,7 @@ cosmos_public_network_access_enabled = true
 # Monitoring
 application_insights_name    = "io-d-ai-common"
 application_insights_rg_name = "io-d-rg-common"
+
+# Key Vault
+key_vault_name    = "io-d-importadesioni-kv"
+key_vault_rg_name = "io-d-selfcare-importadesioni-rg"
