@@ -384,7 +384,11 @@ const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
     TE.chain(_ =>
       _.status === 201 || _.status === 409
         ? TE.right(_)
-        : TE.left(new Error(`Selfcare responded ${_.status}`))
+        : TE.left(
+            new Error(
+              `Selfcare responded ${_.status}:\n${JSON.stringify(_.value)}\n`
+            )
+          )
     ),
     TE.map(_ =>
       _.status === 409
