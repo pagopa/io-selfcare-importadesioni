@@ -386,7 +386,7 @@ const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
         ? TE.right(_)
         : TE.left(
             new Error(
-              `Selfcare responded ${_.status}:\n${JSON.stringify(_.value)}\n`
+              `Selfcare responded ${_.status} | ${JSON.stringify(_.value)}`
             )
           )
     ),
