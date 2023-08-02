@@ -21,8 +21,8 @@ module "cosmosdb_account" {
 
   public_network_access_enabled     = var.cosmos_public_network_access_enabled
   private_endpoint_enabled          = var.cosmos_private_endpoint_enabled
-  private_dns_zone_ids              = var.env_short == "p" ? [data.azurerm_private_dns_zone.privatelink_documents_azure_com[0].id] : []
-  subnet_id                         = var.env_short == "p" ? data.azurerm_subnet.private_endpoints_subnet[0].id : null
+  private_dns_zone_ids              = local.is_prod ? [data.azurerm_private_dns_zone.privatelink_documents_azure_com[0].id] : []
+  subnet_id                         = local.is_prod ? data.azurerm_subnet.private_endpoints_subnet[0].id : null
   is_virtual_network_filter_enabled = false
 
   main_geo_location_location       = azurerm_resource_group.rg.location
