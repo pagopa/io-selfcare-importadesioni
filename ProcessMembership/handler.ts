@@ -390,10 +390,6 @@ const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
             )
           )
     ),
-    TE.mapLeft(
-      error =>
-        new Error(`${error.message} , Request Body : ${JSON.stringify(claim)}`)
-    ),
     TE.map(_ =>
       _.status === 409
         ? "Successful imported (already onboarded)"
