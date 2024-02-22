@@ -90,3 +90,17 @@ module "db_importadesioni_containers" {
   database_name       = azurerm_cosmosdb_sql_database.db_importadesioni.name
   partition_key_path  = each.value.partition_key_path
 }
+
+resource "azurerm_role_assignment" "role_assignment_cosmos_user_access_admin_ad" {
+  scope                = module.cosmosdb_account.id
+  role_definition_name = "User Access Administrator"
+  principal_id         = data.azuread_group.ad_group_services_cms.object_id
+}
+
+#
+# External dependency
+#
+
+data "azuread_group" "ad_group_services_cms" {
+  display_name = "${local.project}-adgroup-services-cms"
+}
