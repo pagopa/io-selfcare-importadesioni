@@ -1,17 +1,7 @@
-# Database instance
-
-variable "cosmos_private_endpoint_enabled" {
-  type = bool
-}
-
-variable "cosmos_public_network_access_enabled" {
-  type = bool
-}
-
 module "cosmosdb_account" {
-  source = "git::https://github.com/pagopa/azurerm.git//cosmosdb_account?ref=v4.3.2"
+  source = "github.com/pagopa/terraform-azurerm-v3//cosmosdb_account?ref=v8.28.0"
 
-  name                = format("%s-cosmos-%s", local.project, var.application_basename)
+  name                = format("%s-cosmos-%s", local.project, local.application_basename)
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
   offer_type          = "Standard"
@@ -19,10 +9,9 @@ module "cosmosdb_account" {
   kind                = "GlobalDocumentDB"
   domain              = "SELFCARE"
 
-  public_network_access_enabled     = var.cosmos_public_network_access_enabled
-  private_endpoint_enabled          = var.cosmos_private_endpoint_enabled
-  private_dns_zone_ids              = var.env_short == "p" ? [data.azurerm_private_dns_zone.privatelink_documents_azure_com[0].id] : []
-  subnet_id                         = var.env_short == "p" ? data.azurerm_subnet.private_endpoints_subnet[0].id : null
+  public_network_access_enabled     = local.cosmos_public_network_access_enabled
+  private_endpoint_enabled          = local.cosmos_private_endpoint_enabled
+  subnet_id                         = local.env_short == "p" ? data.azurerm_subnet.private_endpoints_subnet[0].id : null
   is_virtual_network_filter_enabled = false
 
   main_geo_location_location       = azurerm_resource_group.rg.location
@@ -37,7 +26,9 @@ module "cosmosdb_account" {
     "EnableServerless"
   ]
 
-  tags = var.tags
+  enable_provisioned_throughput_exceeded_alert = false
+
+  tags = local.tags
 }
 
 resource "azurerm_cosmosdb_sql_database" "db_importadesioni" {
@@ -80,15 +71,15 @@ locals {
   ]
 }
 
-module "db_importadesioni_containers" {
-  source   = "git::https://github.com/pagopa/azurerm.git//cosmosdb_sql_container?ref=v2.15.1"
+resource "azurerm_cosmosdb_sql_container" "db_importadesioni_containers" {
   for_each = { for c in local.database_containers : c.name => c }
 
-  name                = each.value.name
-  resource_group_name = azurerm_resource_group.rg.name
-  account_name        = module.cosmosdb_account.name
-  database_name       = azurerm_cosmosdb_sql_database.db_importadesioni.name
-  partition_key_path  = each.value.partition_key_path
+  name                  = each.value.name
+  resource_group_name   = azurerm_resource_group.rg.name
+  account_name          = module.cosmosdb_account.name
+  database_name         = azurerm_cosmosdb_sql_database.db_importadesioni.name
+  partition_key_path    = each.value.partition_key_path
+  partition_key_version = each.value.name == "memberships" ? null : 2
 }
 
 resource "azurerm_role_assignment" "role_assignment_cosmos_user_access_admin_ad" {

@@ -42,24 +42,25 @@ variable "functions_autoscale_default" {
 #
 
 module "functions_app" {
-  source = "git::https://github.com/pagopa/azurerm.git//function_app?ref=v3.4.0"
+  source = "github.com/pagopa/terraform-azurerm-v3//function_app?ref=v8.28.0"
 
   resource_group_name = azurerm_resource_group.rg.name
-  name                = format("%s-%s-fn", local.project, var.application_basename)
-  location            = var.location
+  name                = format("%s-%s-fn", local.project, local.application_basename)
+  location            = local.location
   health_check_path   = "/api/v1/info"
 
-  os_type          = "linux"
-  linux_fx_version = "NODE|16"
-  runtime_version  = "~4"
+  node_version    = "16"
+  runtime_version = "~4"
 
   always_on = "true"
 
   app_service_plan_info = {
-    kind                         = var.functions_kind
-    sku_tier                     = var.functions_sku_tier
-    sku_size                     = var.functions_sku_size
+    kind                         = local.functions_kind
+    sku_tier                     = local.functions_sku_tier
+    sku_size                     = local.functions_sku_size
     maximum_elastic_worker_count = 0
+    worker_count                 = null
+    zone_balancing_enabled       = false
   }
 
   app_settings = {
@@ -91,10 +92,10 @@ module "functions_app" {
     IPA_OPEN_DATA_STORAGE_PATH         = "ipa/ipa-open-data.csv"
 
     # Selfcare connection
-    SELFCARE_URL = var.selfcare_url
-    SELFCARE_KEY = "any-key"
+    SELFCARE_URL = local.selfcare_url
+    SELFCARE_KEY = "db57e16527c246bd8fee6b5a5a518a95"
 
-    "AzureWebJobs.OnContractChange.Disabled" = var.env_short == "p" ? "1" : "0" # disable prod for now
+    "AzureWebJobs.OnContractChange.Disabled" = "0"
   }
 
   subnet_id = module.app_snet.id
@@ -103,5 +104,15 @@ module "functions_app" {
 
   application_insights_instrumentation_key = data.azurerm_application_insights.application_insights.instrumentation_key
 
-  tags = var.tags
+  storage_account_info = {
+    account_kind                      = "StorageV2"
+    account_tier                      = "Standard"
+    account_replication_type          = "ZRS"
+    access_tier                       = "Hot"
+    advanced_threat_protection_enable = true
+    use_legacy_defender_version       = true
+    public_network_access_enabled     = false
+  }
+
+  tags = local.tags
 }

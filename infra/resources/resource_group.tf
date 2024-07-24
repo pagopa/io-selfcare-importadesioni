@@ -1,6 +1,6 @@
 resource "azurerm_resource_group" "rg" {
   name     = format("%s-selfcare-importadesioni-rg", local.project)
-  location = var.location
+  location = local.location
 
-  tags = var.tags
+  tags = local.tags
 }

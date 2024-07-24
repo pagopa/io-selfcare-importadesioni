@@ -2,19 +2,20 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "<= 2.98.0"
+      version = "<= 3.112.0"
     }
     azuread = {
       source  = "hashicorp/azuread"
       version = "= 2.16.0"
     }
-    tls = {
-      source  = "hashicorp/tls"
-      version = "<= 3.4.0"
-    }
   }
 
-  backend "azurerm" {}
+  backend "azurerm" {
+    resource_group_name  = "terraform-state-rg"
+    storage_account_name = "tfappprodio"
+    container_name       = "terraform-state"
+    key                  = "io-selfcare-importadesioni.terraform.tfstate"
+  }
 }
 
 provider "azurerm" {

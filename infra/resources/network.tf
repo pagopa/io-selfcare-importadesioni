@@ -1,50 +1,29 @@
 #
-# Variables
-#
-
-variable "vnet_common_rg" {
-  type        = string
-  description = "Common Virtual network resource group name."
-  default     = ""
-}
-
-variable "vnet_name" {
-  type        = string
-  description = "Common Virtual network resource name."
-  default     = ""
-}
-
-variable "cidr_subnet" {
-  type        = string
-  description = "Subnet address space."
-}
-
-#
 # External dependency
 #
 
 data "azurerm_resource_group" "vnet_common_rg" {
-  name = var.vnet_common_rg
+  name = local.vnet_common_rg
 }
 
 data "azurerm_virtual_network" "vnet_common" {
-  name                = var.vnet_name
+  name                = local.vnet_name
   resource_group_name = data.azurerm_resource_group.vnet_common_rg.name
 }
 
 data "azurerm_subnet" "private_endpoints_subnet" {
-  count = var.env_short == "p" ? 1 : 0
+  count = local.env_short == "p" ? 1 : 0
 
   name                 = "pendpoints"
-  virtual_network_name = var.vnet_name
-  resource_group_name  = var.vnet_common_rg
+  virtual_network_name = local.vnet_name
+  resource_group_name  = local.vnet_common_rg
 }
 
 data "azurerm_private_dns_zone" "privatelink_documents_azure_com" {
-  count = var.env_short == "p" ? 1 : 0
+  count = local.env_short == "p" ? 1 : 0
 
   name                = "privatelink.documents.azure.com"
-  resource_group_name = var.vnet_common_rg
+  resource_group_name = local.vnet_common_rg
 }
 
 #
@@ -52,12 +31,12 @@ data "azurerm_private_dns_zone" "privatelink_documents_azure_com" {
 #
 
 module "app_snet" {
-  source                                         = "git::https://github.com/pagopa/azurerm.git//subnet?ref=v1.0.51"
-  name                                           = format("%s-%s-snet", local.project, var.application_basename)
-  address_prefixes                               = [var.cidr_subnet]
-  resource_group_name                            = data.azurerm_resource_group.vnet_common_rg.name
-  virtual_network_name                           = data.azurerm_virtual_network.vnet_common.name
-  enforce_private_link_endpoint_network_policies = true
+  source               = "github.com/pagopa/terraform-azurerm-v3//subnet?ref=v8.28.0"
+  name                 = format("%s-%s-snet", local.project, local.application_basename)
+  address_prefixes     = [local.cidr_subnet]
+  resource_group_name  = data.azurerm_resource_group.vnet_common_rg.name
+  virtual_network_name = data.azurerm_virtual_network.vnet_common.name
+  # enforce_private_link_endpoint_network_policies = true
 
   service_endpoints = [
     "Microsoft.Web",

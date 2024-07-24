@@ -1,28 +1,26 @@
 module "storage_account" {
-  source = "git::https://github.com/pagopa/azurerm.git//storage_account?ref=v2.5.2"
+  source = "github.com/pagopa/terraform-azurerm-v3//storage_account?ref=v8.28.0"
 
-  name                       = replace(format("%s-%s-st", local.project, var.application_basename), "-", "")
-  account_kind               = "StorageV2"
-  account_tier               = "Standard"
-  account_replication_type   = "ZRS"
-  access_tier                = "Hot"
-  versioning_name            = "versioning"
-  enable_versioning          = false
-  resource_group_name        = azurerm_resource_group.rg.name
-  location                   = var.location
-  advanced_threat_protection = false
-  allow_blob_public_access   = false
+  name                          = replace(format("%s-%s-st", local.project, local.application_basename), "-", "")
+  account_kind                  = "StorageV2"
+  account_tier                  = "Standard"
+  account_replication_type      = "ZRS"
+  access_tier                   = "Hot"
+  public_network_access_enabled = true
+  resource_group_name           = azurerm_resource_group.rg.name
+  location                      = local.location
+  advanced_threat_protection    = false
+  enable_low_availability_alert = false
 
-  tags = var.tags
+  tags = local.tags
 }
 
-# https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/storage_queue
-resource "azurerm_storage_queue" "process-membership" {
+resource "azurerm_storage_queue" "process_membership" {
   name                 = "process-membership"
   storage_account_name = module.storage_account.name
 }
 
-resource "azurerm_storage_queue" "process-membership-poison" {
+resource "azurerm_storage_queue" "process_membership_poison" {
   name                 = "process-membership-poison"
   storage_account_name = module.storage_account.name
 }
