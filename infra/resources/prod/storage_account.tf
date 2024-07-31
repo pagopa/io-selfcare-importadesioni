@@ -31,6 +31,8 @@ module "storage_account_itn" {
   advanced_threat_protection    = false
   enable_low_availability_alert = false
 
+  blob_versioning_enabled = true
+
   tags = local.tags
 }
 
