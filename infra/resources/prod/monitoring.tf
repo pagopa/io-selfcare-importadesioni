@@ -12,6 +12,6 @@ variable "application_insights_rg_name" {
 }
 
 data "azurerm_application_insights" "application_insights" {
-  name                = var.application_insights_name
-  resource_group_name = var.application_insights_rg_name
+  name                = local.application_insights_name
+  resource_group_name = local.application_insights_rg_name
 }
