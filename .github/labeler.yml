@@ -1,0 +1,7 @@
+infra:
+  - changed-files:
+      - any-glob-to-any-file: ["infra/**"]
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ["docs/**", "README.md"]
