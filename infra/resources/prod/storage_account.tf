@@ -12,7 +12,8 @@ module "storage_account" {
   advanced_threat_protection    = false
   enable_low_availability_alert = false
 
-  blob_versioning_enabled = true
+  blob_versioning_enabled  = true
+  blob_change_feed_enabled = true
 
   tags = local.tags
 }
