@@ -1,11 +1,11 @@
 /**
  * Utility functions to read data from IPA Open Data (CSV formatted).
  */
+import { getBlobAsText } from "@pagopa/azure-storage-legacy-migration-kit";
 import { parse } from "csv-parse/sync";
-import { getBlobAsText } from "@pagopa/io-functions-commons/dist/src/utils/azure_storage";
+import * as E from "fp-ts/lib/Either";
 import { pipe } from "fp-ts/lib/function";
 import * as TE from "fp-ts/lib/TaskEither";
-import * as E from "fp-ts/lib/Either";
 
 export type IpaCode = string;
 export type FiscalCode = string;
@@ -66,8 +66,8 @@ export const createIpaDataReader = (
   >
 ): IpaDataReader =>
   pipe(
-    TE.tryCatch(
-      () => getBlobAsText(blobService, containerName, blobName, options),
+    getBlobAsText(blobService, containerName, blobName, options),
+    TE.mapLeft(
       err =>
         new Error(
           `Failed to read IPA from blob '${containerName}/${blobName}', error: ${E.toError(
@@ -75,7 +75,6 @@ export const createIpaDataReader = (
           )}`
         )
     ),
-    TE.chain(TE.fromEither),
     TE.chain(
       TE.fromOption(
         () => new Error(`Blob '${containerName}/${blobName}' not found`)

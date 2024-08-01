@@ -1,9 +1,9 @@
-import { createBlobService } from "azure-storage";
-import { cosmosdb } from "../utils/cosmosdb";
-import { getConfigOrThrow } from "../utils/config";
+import { createBlobService } from "@pagopa/azure-storage-legacy-migration-kit";
 import { dao } from "../models/dao";
-import { createIpaDataReader } from "./ipa";
+import { getConfigOrThrow } from "../utils/config";
+import { cosmosdb } from "../utils/cosmosdb";
 import OnContractChangeHandler from "./handler";
+import { createIpaDataReader } from "./ipa";
 
 const config = getConfigOrThrow();
 
