@@ -8,6 +8,7 @@ import { createIpaDataReader } from "./ipa";
 const config = getConfigOrThrow();
 
 const blobService = createBlobService(
+  // TODO here insert the new primary storage connection string
   config.INTERNAL_STORAGE_CONNECTION_STRING
 );
 
