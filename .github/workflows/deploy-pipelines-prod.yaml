@@ -2,10 +2,6 @@ name: Deploy Pipelines - PROD
 
 on:
   workflow_dispatch:
-  # FOR TESTING
-  push:
-    branches:
-      - EC-382-azure-pipe-migration
 
 jobs:
   deploy_on_prod:

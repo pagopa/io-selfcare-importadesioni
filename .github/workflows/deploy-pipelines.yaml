@@ -1,6 +1,5 @@
 name: Deploy Pipelines
 
-# Only manual activations are intended
 on:
   workflow_call:
     inputs:
@@ -58,8 +57,6 @@ jobs:
       - name: Build
         run: yarn build
         working-directory: .
-      
-      # - run: dotnet build -o bin
 
       - name: Copy deploy files
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea #v7.0.1
@@ -147,33 +144,32 @@ jobs:
           tenant-id: ${{ secrets.ARM_TENANT_ID }}
           subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
       
-      # FOR TESTING
-      # - name: Deploy
-      #   if: ${{ inputs.use_staging_slot == false }}
-      #   run: |
-      #     az webapp deploy \
-      #       --resource-group ${{ inputs.resource_group_name }} \
-      #       --name ${{ inputs.app_name }} \
-      #       --src-path  ${{ github.workspace }}/${{ env.BUNDLE_NAME }}.zip \
-      #       --type zip \
-      #       --async false
+      - name: Deploy
+        if: ${{ inputs.use_staging_slot == false }}
+        run: |
+          az webapp deploy \
+            --resource-group ${{ inputs.resource_group_name }} \
+            --name ${{ inputs.app_name }} \
+            --src-path  ${{ github.workspace }}/${{ env.BUNDLE_NAME }}.zip \
+            --type zip \
+            --async false
 
-      # - name: Deploy to Staging Slot
-      #   if: ${{ inputs.use_staging_slot == true }}
-      #   run: |
-      #     az webapp deploy \
-      #       --resource-group ${{ inputs.resource_group_name }} \
-      #       --name ${{ inputs.app_name }} \
-      #       --slot staging \
-      #       --src-path  ${{ github.workspace }}/${{ env.BUNDLE_NAME }}.zip \
-      #       --type zip \
-      #       --async false
+      - name: Deploy to Staging Slot
+        if: ${{ inputs.use_staging_slot == true }}
+        run: |
+          az webapp deploy \
+            --resource-group ${{ inputs.resource_group_name }} \
+            --name ${{ inputs.app_name }} \
+            --slot staging \
+            --src-path  ${{ github.workspace }}/${{ env.BUNDLE_NAME }}.zip \
+            --type zip \
+            --async false
 
-      # - name: Swap Staging and Production Slots
-      #   if: ${{ inputs.use_staging_slot == true }}
-      #   run: |
-      #     az webapp deployment slot swap \
-      #       -g ${{ inputs.resource_group_name }} \
-      #       -n ${{ inputs.app_name }} \
-      #       --slot staging \
-      #       --target-slot production
+      - name: Swap Staging and Production Slots
+        if: ${{ inputs.use_staging_slot == true }}
+        run: |
+          az webapp deployment slot swap \
+            -g ${{ inputs.resource_group_name }} \
+            -n ${{ inputs.app_name }} \
+            --slot staging \
+            --target-slot production
