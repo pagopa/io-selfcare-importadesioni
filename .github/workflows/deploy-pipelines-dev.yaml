@@ -13,3 +13,4 @@ jobs:
       resource_group_name: 'io-d-selfcare-importadesioni-rg'
       app_name: 'io-d-importadesioni-fn'
       use_staging_slot: true
+      use_private_agent: false
