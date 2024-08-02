@@ -1,0 +1,15 @@
+name: Deploy Pipelines - DEV
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy_on_dev:
+    uses: ./.github/workflows/deploy-pipelines.yaml
+    name: Deploy on DEV
+    secrets: inherit
+    with:
+      environment: 'dev'
+      resource_group_name: 'io-d-selfcare-importadesioni-rg'
+      app_name: 'io-d-importadesioni-fn'
+      use_staging_slot: true

@@ -1,0 +1,19 @@
+name: Deploy Pipelines - PROD
+
+on:
+  workflow_dispatch:
+  # FOR TESTING
+  push:
+    branches:
+      - EC-382-azure-pipe-migration
+
+jobs:
+  deploy_on_prod:
+    uses: ./.github/workflows/deploy-pipelines.yaml
+    name: Deploy on PROD
+    secrets: inherit
+    with:
+      environment: 'prod'
+      resource_group_name: 'io-p-selfcare-importadesioni-rg'
+      app_name: 'io-p-importadesioni-fn'
+      use_staging_slot: true
