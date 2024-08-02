@@ -4,6 +4,10 @@ on:
   workflow_dispatch:
   pull_request:
     types: [opened, synchronize]
+    paths:
+      - "*"
+      - "!infra/*"
+      - "!.github/*"
   # FOR TESTING
   push:
     branches:
@@ -43,20 +47,36 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
         working-directory: .
-      # The code-review script must be defined in the root workspace
-      # Example: "turbo run typecheck format:check lint:check //#test:coverage"
-      # See https://github.com/pagopa/io-fims/pull/41
-      - name: Run code-review script
-        run: yarn run code-review
+      # # The code-review script must be defined in the root workspace
+      # # Example: "turbo run typecheck format:check lint:check //#test:coverage"
+      # # See https://github.com/pagopa/io-fims/pull/41
+      # - name: Run code-review script
+      #   run: yarn run code-review
 
-      # Codecov provides reports and metrics about test coverage data.
-      # To enable set CODECOV_TOKEN secret at repo level and make sure
-      # that your "code-review" script creates a "coverage/" folder in
-      # the root workspace.
-      - name: Upload coverage report to codecov.io
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        if: ${{ env.CODECOV_TOKEN != '' }}
-        uses: codecov/codecov-action@84508663e988701840491b86de86b666e8a86bed # v4.3.0
-        with:
-          token: ${{ env.CODECOV_TOKEN }}
+      # # Codecov provides reports and metrics about test coverage data.
+      # # To enable set CODECOV_TOKEN secret at repo level and make sure
+      # # that your "code-review" script creates a "coverage/" folder in
+      # # the root workspace.
+      # - name: Upload coverage report to codecov.io
+      #   env:
+      #     CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      #   if: ${{ env.CODECOV_TOKEN != '' }}
+      #   uses: codecov/codecov-action@84508663e988701840491b86de86b666e8a86bed # v4.3.0
+      #   with:
+      #     token: ${{ env.CODECOV_TOKEN }}
+
+      - name: Build
+        run: yarn build
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Generate models
+        run: yarn generate
+
+      - name: Unit tests exec
+        run: yarn test:coverage
+        
+      - name: Code coverage
+        run: bash <(curl -s https://codecov.io/bash)
+        shell: bash
