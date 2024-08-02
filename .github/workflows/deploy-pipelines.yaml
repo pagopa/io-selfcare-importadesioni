@@ -119,7 +119,7 @@ jobs:
       
       # FOR TESTING
       - name: Test Step
-        run: la -la ${{ github.workspace }}/bundle
+        run: ls -la ${{ github.workspace }}/bundle
 
   deploy:
     if: ${{ !github.event.act }}

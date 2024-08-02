@@ -8,9 +8,50 @@ on:
   push:
     branches:
       - EC-382-azure-pipe-migration
-      
+
+# jobs:
+#   js_code_review:
+#     uses: pagopa/dx/.github/workflows/js_code_review.yaml@main
+#     name: Code Review
+#     secrets: inherit
+
+
 jobs:
   js_code_review:
-    uses: pagopa/dx/.github/workflows/js_code_review.yaml@main
-    name: Code Review
-    secrets: inherit
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Check-out code
+        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+
+      # Corepack is an official tool by Node.js that manages package managers versions
+      - name: Setup yarn
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@1e60f620b9541d16bece96c5465dc8ee9832be0b # v4.0.3
+        with:
+          node-version-file: ".node-version"
+          cache: "yarn"
+          # cache-dependency-path: "yarn.lock"
+
+      - name: Install dependencies
+        run: yarn install --immutable
+        working-directory: .
+      # The code-review script must be defined in the root workspace
+      # Example: "turbo run typecheck format:check lint:check //#test:coverage"
+      # See https://github.com/pagopa/io-fims/pull/41
+      - name: Run code-review script
+        run: yarn run code-review
+
+      # Codecov provides reports and metrics about test coverage data.
+      # To enable set CODECOV_TOKEN secret at repo level and make sure
+      # that your "code-review" script creates a "coverage/" folder in
+      # the root workspace.
+      - name: Upload coverage report to codecov.io
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        if: ${{ env.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@84508663e988701840491b86de86b666e8a86bed # v4.3.0
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
