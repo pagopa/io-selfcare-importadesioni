@@ -25,6 +25,7 @@ export const IConfig = t.interface({
   COSMOSDB_URI: NonEmptyString,
 
   INTERNAL_STORAGE_CONNECTION_STRING: NonEmptyString,
+  INTERNAL_STORAGE_FALLBACK_CONNECTION_STRING: NonEmptyString,
 
   IPA_OPEN_DATA_STORAGE_PATH: NonEmptyString,
 
