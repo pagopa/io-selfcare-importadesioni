@@ -26,10 +26,6 @@ on:
         type: boolean
         required: false
         default: true
-  # FOR TESTING
-  push:
-    branches:
-      - EC-382-azure-pipe-migration
 
 concurrency:
   group: ${{ github.workflow }}-cd
@@ -123,7 +119,7 @@ jobs:
       
       # FOR TESTING
       - name: Test Step
-        run: cat ${{ github.workspace }}/bundle
+        run: la -la ${{ github.workspace }}/bundle
 
   deploy:
     if: ${{ !github.event.act }}
