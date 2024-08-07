@@ -136,7 +136,7 @@ jobs:
           name: ${{ env.BUNDLE_NAME }}
 
       - name: Azure Login
-        uses: azure/login@v2 # v2.0.0
+        uses: azure/login@6c251865b4e6290e7b78be643ea2d005bc51f69a # v2
         env:
           ARM_USE_OIDC: true
         with:
