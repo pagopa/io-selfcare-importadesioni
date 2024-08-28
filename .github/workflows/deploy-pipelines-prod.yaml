@@ -14,3 +14,4 @@ jobs:
       app_name: 'io-p-importadesioni-fn'
       use_staging_slot: true
       use_private_agent: false
+      health_check_path: '/api/v1/info'
