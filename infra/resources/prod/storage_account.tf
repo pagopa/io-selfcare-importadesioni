@@ -79,3 +79,23 @@ resource "azurerm_storage_object_replication" "weu_itn" {
     copy_blobs_created_after   = "Everything"
   }
 }
+
+
+module "azure_storage_account" {
+  source = "github.com/pagopa/dx//infra/modules/azure_storage_account?ref=main"
+
+  environment         = locals.env
+  resource_group_name = var.resource_group_name ###TO CHECK
+  access_tier         = "Hot"
+
+  subservices_enabled = {
+    blob  = true
+    file  = false
+    queue = true
+    table = false
+  }
+
+  force_public_network_access_enabled = true
+
+  tags = locals.tags
+}
