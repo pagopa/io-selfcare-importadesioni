@@ -84,8 +84,8 @@ resource "azurerm_storage_object_replication" "weu_itn" {
 module "azure_storage_account" {
   source = "github.com/pagopa/dx//infra/modules/azure_storage_account?ref=main"
 
-  environment         = locals.env
-  resource_group_name = var.resource_group_name ###TO CHECK
+  environment         = local.itn_environment
+  resource_group_name = azurerm_resource_group.itn.name
   access_tier         = "Hot"
 
   subservices_enabled = {

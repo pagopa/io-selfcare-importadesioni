@@ -35,4 +35,13 @@ locals {
     CostCenter     = "TS310 - PAGAMENTI & SERVIZI"
     ManagementTeam = "IO Enti & Servizi"
   }
+  domain          = "importadesioni"
+  instance_number = "01"
+  itn_environment = {
+    prefix          = local.prefix
+    env_short       = local.env_short
+    location        = local.location_itn
+    domain          = local.domain
+    instance_number = local.instance_number
+  }
 }
