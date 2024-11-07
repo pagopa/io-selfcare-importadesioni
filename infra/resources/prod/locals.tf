@@ -4,7 +4,7 @@ locals {
   env_short            = "p"
   location             = "westeurope"
   location_itn         = "italynorth"
-  app_name             = "example"
+  app_name             = "ex"
   project_itn          = "${local.prefix}-${local.env_short}-itn"
   project              = "${local.prefix}-${local.env_short}"
   application_basename = "importadesioni"
