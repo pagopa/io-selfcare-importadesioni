@@ -100,5 +100,5 @@ module "azure_storage_account" {
 
   force_public_network_access_enabled = true
 
-  tags = locals.tags
+  tags = local.tags
 }
