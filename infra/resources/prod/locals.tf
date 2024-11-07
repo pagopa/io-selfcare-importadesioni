@@ -4,7 +4,7 @@ locals {
   env_short            = "p"
   location             = "westeurope"
   location_itn         = "italynorth"
-  app_name             = "e"
+  app_name             = "ex"
   project_itn          = "${local.prefix}-${local.env_short}-itn"
   project              = "${local.prefix}-${local.env_short}"
   application_basename = "importadesioni"
@@ -36,7 +36,7 @@ locals {
     CostCenter     = "TS310 - PAGAMENTI & SERVIZI"
     ManagementTeam = "IO Enti & Servizi"
   }
-  domain          = "importadesioni"
+  domain          = "impade"
   instance_number = "01"
   itn_environment = {
     prefix          = local.prefix
