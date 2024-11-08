@@ -99,6 +99,9 @@ module "azure_storage_account" {
   }
 
   blob_features = {
+    immutability_policy = {
+      enabled = false
+    }
     versioning = true
     change_feed = {
       enabled = true
