@@ -98,6 +98,13 @@ module "azure_storage_account" {
     table = false
   }
 
+  blob_features = {
+    versioning = true
+    change_feed = {
+      enabled = true
+    }
+  }
+
   force_public_network_access_enabled = true
 
   tags = local.tags
