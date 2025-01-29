@@ -14,7 +14,7 @@ on:
 
 jobs:
   infra_review:
-    uses: pagopa/dx/.github/workflows/infra_plan.yaml@check-modules-lock-in-cicd
+    uses: pagopa/dx/.github/workflows/infra_plan.yaml@main
     name: Validation Infrastructure
     secrets: inherit
     with:
