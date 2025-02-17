@@ -79,3 +79,37 @@ resource "azurerm_storage_object_replication" "weu_itn" {
     copy_blobs_created_after   = "Everything"
   }
 }
+
+
+module "azure_storage_account" {
+  source = "github.com/pagopa/dx//infra/modules/azure_storage_account?ref=main"
+
+  environment         = local.itn_environment
+  resource_group_name = azurerm_resource_group.itn.name
+  tier                = "l"
+
+
+  subnet_pep_id                        = module.common_values.pep_subnets.itn.id
+  private_dns_zone_resource_group_name = module.common_values.resource_groups.weu.common
+
+  subservices_enabled = {
+    blob  = true
+    file  = false
+    queue = true
+    table = false
+  }
+
+  blob_features = {
+    immutability_policy = {
+      enabled = false
+    }
+    versioning = true
+    change_feed = {
+      enabled = true
+    }
+  }
+
+  force_public_network_access_enabled = true
+
+  tags = local.tags
+}
