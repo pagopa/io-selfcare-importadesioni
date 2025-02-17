@@ -30,5 +30,38 @@ module "federated_identities" {
 
   repositories = [local.repo_name]
 
+  continuos_integration = {
+    enable = true
+    roles = {
+      subscription = [
+        "Reader",
+        "Reader and Data Access",
+        "PagoPA IaC Reader",
+        "DocumentDB Account Contributor",
+        "PagoPA API Management Service List Secrets"
+      ]
+      resource_groups = {
+        terraform-state-rg = [
+          "Storage Blob Data Contributor"
+        ]
+      }
+    }
+  }
+
+  continuos_delivery = {
+    enable = true
+    roles = {
+      subscription = ["Contributor"]
+      resource_groups = {
+        terraform-state-rg = [
+          "Storage Blob Data Contributor"
+        ]
+        io-p-selfcare-importadesioni-rg = [
+          "Role Based Access Control Administrator"
+        ]
+      }
+    }
+  }
+
   tags = local.tags
 }
