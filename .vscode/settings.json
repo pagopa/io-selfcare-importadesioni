@@ -6,6 +6,6 @@
   "azureFunctions.preDeployTask": "npm prune",
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
-    "source.organizeImports": true,
+    "source.organizeImports": "explicit"
   }
 }

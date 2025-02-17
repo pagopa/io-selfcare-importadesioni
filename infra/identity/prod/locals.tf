@@ -9,10 +9,10 @@ locals {
   repo_name = "io-selfcare-importadesioni"
 
   tags = {
-    CostCenter     = "TS310 - PAGAMENTI & SERVIZI"
+    CostCenter     = "TS000 - Tecnologia e Servizi"
     CreatedBy      = "Terraform"
     Environment    = "Prod"
-    Owner          = "IO"
+    BusinessUnit   = "App IO"
     ManagementTeam = "IO Enti & Servizi"
     Source         = "https://github.com/pagopa/io-selfcare-importadesioni/blob/master/infra/identity/prod"
   }
