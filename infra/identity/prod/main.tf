@@ -59,6 +59,9 @@ module "federated_identities" {
         io-p-selfcare-importadesioni-rg = [
           "Role Based Access Control Administrator"
         ]
+        io-p-itn-importadesioni-rg-01 = [
+          "Role Based Access Control Administrator"
+        ]
       }
     }
   }
