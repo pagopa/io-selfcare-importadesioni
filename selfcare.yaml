@@ -115,6 +115,117 @@ paths:
                 status: 500
                 title: string
                 type: string
+  '/onboarding/aggregation/{externalInstitutionId}':
+      post:
+        tags:
+          - onboardingAggregation
+        summary: aggregationContractOnboarding
+        description: The service allows the import of aggregator institutions' contracts
+        operationId: aggregationContractOnboardingUsingPOST
+        parameters:
+          - name: externalInstitutionId
+            in: path
+            description: Institution's unique external identifier
+            required: true
+            schema:
+              type: string
+        requestBody:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OnboardingImportAggegatorDto'
+              example:
+                importContract:
+                  contractType: string
+                  fileName: string
+                  filePath: string
+                  onboardingDate: string
+                users:
+                  - email: email@example.com
+                    name: string
+                    role: DELEGATE
+                    surname: string
+                    taxCode: string
+                aggegates:
+                  - taxCode: string   
+        responses:
+          '201':
+            description: Created
+          '400':
+            description: Bad Request
+            content:
+              application/problem+json:
+                schema:
+                  $ref: '#/components/schemas/Problem'
+                example:
+                  detail: string
+                  instance: string
+                  invalidParams:
+                    - name: string
+                      reason: string
+                  status: 500
+                  title: string
+                  type: string
+          '401':
+            description: Unauthorized
+            content:
+              application/problem+json:
+                schema:
+                  $ref: '#/components/schemas/Problem'
+                example:
+                  detail: string
+                  instance: string
+                  invalidParams:
+                    - name: string
+                      reason: string
+                  status: 500
+                  title: string
+                  type: string
+          '403':
+            description: Forbidden
+            content:
+              application/problem+json:
+                schema:
+                  $ref: '#/components/schemas/Problem'
+                example:
+                  detail: string
+                  instance: string
+                  invalidParams:
+                    - name: string
+                      reason: string
+                  status: 500
+                  title: string
+                  type: string
+          '409':
+            description: Conflict
+            content:
+              application/problem+json:
+                schema:
+                  $ref: '#/components/schemas/Problem'
+                example:
+                  detail: string
+                  instance: string
+                  invalidParams:
+                    - name: string
+                      reason: string
+                  status: 500
+                  title: string
+                  type: string
+          '500':
+            description: Internal Server Error
+            content:
+              application/problem+json:
+                schema:
+                  $ref: '#/components/schemas/Problem'
+                example:
+                  detail: string
+                  instance: string
+                  invalidParams:
+                    - name: string
+                      reason: string
+                  status: 500
+                  title: string
+                  type: string
 components:
   schemas:
     ImportContractDto:
@@ -166,6 +277,26 @@ components:
           items:
             $ref: '#/components/schemas/UserDto'
           description: List of onboarding users
+    OnboardingImportAggegatorDto:
+      title: OnboardingImportAggegatorDto
+      required:
+        - importContract
+        - users
+        - aggegates
+      type: object
+      properties:
+        importContract:
+          $ref: '#/components/schemas/ImportContractDto'
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserDto'
+          description: List of onboarding users
+        aggegates:
+          type: array
+          items:
+            $ref: '#/components/schemas/Aggregates'
+          description: List of aggregates
     Problem:
       title: Problem
       required:
@@ -228,6 +359,15 @@ components:
         taxCode:
           type: string
           description: User's fiscal code
+    Aggregates:
+      title: Aggregates
+      required:
+        - taxCode
+      type: object
+      properties:
+        taxCode:
+            type: string
+            description: User's fiscal code
   securitySchemes:
     apiKeyHeader:
       type: apiKey
