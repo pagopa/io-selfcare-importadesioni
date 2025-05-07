@@ -196,21 +196,6 @@ paths:
                   status: 500
                   title: string
                   type: string
-          '409':
-            description: Conflict
-            content:
-              application/problem+json:
-                schema:
-                  $ref: '#/components/schemas/Problem'
-                example:
-                  detail: string
-                  instance: string
-                  invalidParams:
-                    - name: string
-                      reason: string
-                  status: 500
-                  title: string
-                  type: string
           '500':
             description: Internal Server Error
             content:
