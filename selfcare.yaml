@@ -133,7 +133,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/OnboardingImportAggegatorDto'
+                $ref: '#/components/schemas/OnboardingImportAggregatorDto'
               example:
                 importContract:
                   contractType: string
@@ -146,7 +146,7 @@ paths:
                     role: DELEGATE
                     surname: string
                     taxCode: string
-                aggegates:
+                aggregates:
                   - taxCode: string   
         responses:
           '201':
@@ -277,12 +277,12 @@ components:
           items:
             $ref: '#/components/schemas/UserDto'
           description: List of onboarding users
-    OnboardingImportAggegatorDto:
+    OnboardingImportAggregatorDto:
       title: OnboardingImportAggegatorDto
       required:
         - importContract
         - users
-        - aggegates
+        - aggregates
       type: object
       properties:
         importContract:
@@ -292,7 +292,7 @@ components:
           items:
             $ref: '#/components/schemas/UserDto'
           description: List of onboarding users
-        aggegates:
+        aggregates:
           type: array
           items:
             $ref: '#/components/schemas/Aggregates'
