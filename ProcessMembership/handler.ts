@@ -497,7 +497,7 @@ const checkVersion = (
     E.map(v => ({ ...contract, version: v }))
   );
 
-export const createHandler = ({
+const createHandler = ({
   dao,
   selfcareClient
 }: {
