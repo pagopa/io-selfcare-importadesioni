@@ -1,3 +1,4 @@
+/* eslint-disable sonarjs/no-identical-functions */
 /* eslint-disable sonarjs/no-duplicate-string */
 import { Context } from "@azure/functions";
 import { readableReport } from "@pagopa/ts-commons/lib/reporters";
@@ -365,6 +366,17 @@ const composeSelfCareMembershipClaim = (
   externalInstitutionId: fiscalCode
 });
 
+const composeSelfCareMembershipClaimWithEmptyUser = (
+  fiscalCode: NonEmptyString,
+  contract: ValidContract
+): SelfCareMembershipClaimParams => ({
+  body: {
+    importContract: composeSelfcareContract(contract),
+    users: []
+  },
+  externalInstitutionId: fiscalCode
+});
+
 // Submit the claim to SelfCare to import the memebership
 const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
   claim: SelfCareMembershipClaimParams
@@ -397,7 +409,7 @@ const submitMembershipClaimToSelfcare = (selfcareClient: SelfCareClient) => (
     TE.map(_ =>
       _.status === 409
         ? "Successful imported (already onboarded)"
-        : "Successful imported"
+        : `Successful imported | Request Body : ${JSON.stringify(claim.body)}`
     )
   );
 
@@ -452,35 +464,6 @@ const markMembershipAsFailed = (context: Context, dao: Dao) => (
     TE.map(_ => context.log.error(note))
   );
 
-// Format a failure message
-const composeFailureNote = ({ id, attachment }: ValidContract) => (
-  failure: DelegatesFailures
-): string => {
-  const msg = (note: string): string =>
-    `${note} | contract#${id} attachment#${attachment.id}`;
-  switch (failure) {
-    case "no-cf":
-      return msg("Manager has empty CODICEFISCALE");
-    case "no-manager":
-      return msg("No manager found");
-    case "organization-cf":
-      return msg("Wrong CODICEFISCALE (organization pattern)");
-    case "wrong-cf":
-      return msg("Wrong CODICEFISCALE (bad pattern)");
-    case "wrong-cf-lowercase":
-      return msg("Wrong CODICEFISCALE (lowercase)");
-    case "wrong-cf-with-spaces":
-      return msg("Wrong CODICEFISCALE (has spaces)");
-    case "wrong-email":
-      return msg("Wrong EMAIL");
-    case "other":
-      return msg("Unknown error");
-    default:
-      const _: never = failure;
-      return msg(`Unhandled failure: ${_}`);
-  }
-};
-
 const parseIncomingMessage = (
   queueItem: Json
 ): E.Either<ValidationError, QueueItem> =>
@@ -514,7 +497,7 @@ const checkVersion = (
     E.map(v => ({ ...contract, version: v }))
   );
 
-const createHandler = ({
+export const createHandler = ({
   dao,
   selfcareClient
 }: {
@@ -555,11 +538,28 @@ const createHandler = ({
               parseDelegates,
 
               E.fold(
-                // When something wrong with delegates, we cannot continue
-                // we mark membership ad discarded (with failure note)
-                flow(composeFailureNote(contract), note =>
-                  markMembershipAsDiscarded(context, dao)(ipaCode, note)
-                ),
+                // When something wrong with delegates, we can continue
+                // calling the selfcare api without users (delegate)
+                _ =>
+                  pipe(
+                    composeSelfCareMembershipClaimWithEmptyUser(
+                      fiscalCode,
+                      contract
+                    ),
+                    submitMembershipClaimToSelfcare(selfcareClient),
+                    TE.fold(
+                      err =>
+                        markMembershipAsFailed(context, dao)(
+                          ipaCode,
+                          `${err.message} | contract id#${contract.id}`
+                        ),
+                      successMessage =>
+                        markMembershipAsCompleted(dao)(
+                          ipaCode,
+                          `${successMessage} | contract id#${contract.id}`
+                        )
+                    )
+                  ),
 
                 // If delegates satisfy requirements, we can process the membership to selfcare
                 delegates =>
@@ -578,7 +578,7 @@ const createHandler = ({
                       successMessage =>
                         markMembershipAsCompleted(dao)(
                           ipaCode,
-                          `${successMessage} | contract id#${contract.id}`
+                          `${successMessage} | no Delegates imported | contract id#${contract.id}`
                         )
                     )
                   )
