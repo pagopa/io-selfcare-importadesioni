@@ -556,7 +556,7 @@ const createHandler = ({
                       successMessage =>
                         markMembershipAsCompleted(dao)(
                           ipaCode,
-                          `${successMessage} | contract id#${contract.id}`
+                          `${successMessage} | no Delegates imported | contract id#${contract.id}`
                         )
                     )
                   ),
@@ -578,7 +578,7 @@ const createHandler = ({
                       successMessage =>
                         markMembershipAsCompleted(dao)(
                           ipaCode,
-                          `${successMessage} | no Delegates imported | contract id#${contract.id}`
+                          `${successMessage} | contract id#${contract.id}`
                         )
                     )
                   )
