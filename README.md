@@ -13,3 +13,142 @@ Due to the nature of the project, it's been easier for us to use Italian words f
 ----
 
 More details: https://pagopa.atlassian.net/wiki/spaces/IOPAE/pages/608469545/
+
+## Local HTTP smoke test
+
+The existing Compose file starts the official Cosmos DB vNext emulator and
+Azurite. Functions run on the host using the repository's Node version. No Azure
+subscription, production credentials, or real SelfCare endpoint are required.
+
+Prerequisites: Docker with Compose 2.24 or newer, Node 16.9.1 (selected by
+`.node-version`), and Azure Functions Core Tools v4. Node 16 is end-of-life; this
+setup reproduces the existing application and is for local testing only.
+
+### 1. Install, build, and start the emulators
+
+Run from the repository root:
+
+```sh
+npm exec --yes --package=yarn@1.22.22 -- yarn install --frozen-lockfile --non-interactive
+npm run build
+docker compose up -d --wait --wait-timeout 180
+node docker/local/run.cjs seed
+```
+
+The seed creates database `importadesioni-local`, with containers `memberships`,
+`contracts`, and `pecDelegato`, using the application's partition keys. It upserts
+one fake institution (`ente_test`, fiscal code `00000000000`), one V2.3 contract,
+and one manager (`mario.rossi@example.com`). The membership starts as `Initial`.
+Re-running the seed resets only these fixture documents; it does not delete the
+database. The attachment path is fictitious: this importer sends metadata, not
+file contents.
+
+Cosmos uses HTTPS. The seed exports the public emulator CA from its container to
+the ignored `.local-functions/` directory. Only the local test clients and
+Functions worker trust this additional CA; TLS verification remains enabled.
+Run the seed again after recreating Cosmos, then restart Functions if its
+certificate changed. Emulator ports are bound to loopback only.
+
+### 2. Start the application
+
+In a terminal that stays open:
+
+```sh
+node docker/local/run.cjs start
+```
+
+Wait for the HTTP endpoints to appear in the Functions output. The first start
+can take longer while Core Tools downloads the extension bundle. The launcher
+creates an isolated runtime directory with copies of the selected bindings,
+links to the real compiled code, and local-only settings. It does not read or
+overwrite the repository's `.env` or `local.settings.json`.
+
+### 3. Run the happy path
+
+In another terminal, from the repository root:
+
+```sh
+curl -i http://127.0.0.1:7071/admin/host/status
+node docker/local/run.cjs check
+```
+
+`check` sends this request, verifies `202 Accepted` and the selected IPA code,
+then waits up to 90 seconds for the membership to become `Processed` in Cosmos:
+
+```sh
+curl -i -X POST 'http://127.0.0.1:7071/api/v1/start?ipas=ente_test&status=Initial'
+```
+
+Use only one of `check`, the manual POST, or the Bruno Start Import request per
+seed. The request only starts asynchronous processing; `202` alone is not proof
+of a successful import.
+The Functions log should show `ProcessMembership` and `SelfcareMock`, with a mock
+response of `201`. A successful automated check ends with:
+
+```text
+PASS: HTTP -> Cosmos -> Azurite queue -> worker -> SelfcareMock -> Processed
+```
+
+Cosmos Data Explorer is available at <http://localhost:1234>. Inspect
+`importadesioni-local` / `memberships` / `ente_test` for the final `status` and
+`note`. To repeat the test after the previous invocation has finished, re-run
+`seed`, then `check`.
+
+### 4. Run the same flow with Bruno
+
+The [Bruno collection](bruno/bruno.json) contains the same HTTP calls as the curl
+examples, with response tests and a [Local environment](bruno/environments/Local.bru).
+It uses only the local Functions host; no credentials or real SelfCare service
+are needed. Bruno does not start Docker, run the seed, or launch Functions.
+
+1. Complete steps 1 and 2 above. Before repeating an import, wait for the previous
+	invocation to finish and run `node docker/local/run.cjs seed` again.
+2. In Bruno, choose **Open Collection**, select the repository's `bruno` directory,
+	and select the **Local** environment.
+3. Send [Runtime Status](bruno/01%20-%20Runtime%20Status.bru). Its test expects HTTP
+	`200` and `state: Running`.
+4. Send [Start Import](bruno/02%20-%20Start%20Import.bru). Its test expects HTTP
+	`202` and an array containing `ente_test`. Do not run `check` or the manual
+	POST on the same seed.
+5. In [Cosmos Data Explorer](http://localhost:1234), open `importadesioni-local` /
+	`memberships` / `ente_test`. Wait for `status: Processed` and
+	`note: Successful imported | contract id#contratto-test`. The Functions
+	terminal should show `ProcessMembership` and the successful `SelfcareMock`
+	invocation. This completes the asynchronous happy path.
+
+The environment defaults are `baseUrl=http://127.0.0.1:7071`, `ipaCode=ente_test`,
+and `membershipStatus=Initial`. A `202` response with `[]` does not exercise the
+worker: it means no eligible membership matched, and the Bruno test fails.
+Re-seed before retrying. Running the collection in sequence performs steps 3-4
+only; the final Cosmos verification is still required. No background polling
+scripts are included in the collection.
+
+### Scope and troubleshooting
+
+- This test exercises the real HTTP handler, Cosmos DAO, Storage queue binding,
+	membership worker, and the repository's HTTP SelfCare mock.
+- `OnContractChange` is intentionally excluded: the seed supplies already
+	normalized data. Change feed processing, IPA CSV ingestion, real SelfCare
+	behavior, authentication, and production networking are not covered.
+- `Info` is disabled only in the local launcher: its shared health check also
+	probes Azure Files, which Azurite does not implement. Use `/admin/host/status`
+	for runtime readiness and `check` for actual import verification.
+- The second Azurite service is available with `docker compose --profile
+	extra-storage up -d`. It is not needed for this smoke test.
+- The old Functions and Traefik services remain under the `legacy` profile for
+	reference. They have not been modernized or validated; do not enable that
+	profile for this procedure. The old Dockerfiles are not used by default.
+- If a port is occupied, stop the conflicting local service first. This setup
+	uses ports 7071, 8081, 1234, and 10000-10002.
+- For startup or emulator failures: `docker compose ps` and
+	`docker compose logs --tail 100 cosmosdb fnstorage`. For queue/worker failures,
+	inspect the Functions terminal and the membership's `note` in Cosmos.
+- The Cosmos vNext image is a preview and does not enforce authentication.
+	Its `vnext-latest` tag can change; emulator behavior is not a production
+	compatibility guarantee.
+
+Stop Functions with Ctrl+C, then stop the emulators (preserving their data):
+
+```sh
+docker compose down
+```

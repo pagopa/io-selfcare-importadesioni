@@ -1,0 +1,6 @@
+{
+  "version": "1",
+  "name": "IO SelfCare - Local Smoke Test",
+  "type": "collection",
+  "ignore": ["node_modules", ".git"]
+}

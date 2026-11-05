@@ -1,0 +1,37 @@
+meta {
+  name: Start Import
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/start?ipas={{ipaCode}}&status={{membershipStatus}}
+  body: none
+  auth: none
+}
+
+params:query {
+  ipas: {{ipaCode}}
+  status: {{membershipStatus}}
+}
+
+tests {
+  test("The import was accepted and the seeded membership was selected", function () {
+    expect(res.getStatus()).to.equal(202);
+    expect(res.getBody()).to.be.an("array");
+    expect(res.getBody()).to.include(bru.getEnvVar("ipaCode"));
+  });
+}
+
+docs {
+  Run the seed before each new happy-path test. Do not also run the CLI check
+  or the manual POST on the same seed: they would submit another import.
+
+  A 202 response only confirms queue submission. In Cosmos Data Explorer,
+  inspect importadesioni-local / memberships / ente_test and wait for status
+  Processed and note Successful imported | contract id#contratto-test.
+  The worker calls the local SelfcareMock HTTP endpoint, not the real service.
+
+  A 202 response with an empty array means no eligible membership was selected.
+  This request's test deliberately fails in that case; check the seed and status.
+}
