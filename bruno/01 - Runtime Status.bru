@@ -1,0 +1,24 @@
+meta {
+  name: Runtime Status
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/admin/host/status
+  body: none
+  auth: none
+}
+
+tests {
+  test("The Functions runtime is running", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().state).to.equal("Running");
+  });
+}
+
+docs {
+  Checks the local Functions host, not the outcome of an import.
+  Start the emulators, seed the database, and start the local launcher first.
+  Use Info for the application health check, including Cosmos DB and Azurite.
+}

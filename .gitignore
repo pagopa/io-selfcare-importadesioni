@@ -47,6 +47,7 @@ coverage
 yarn-error.log
 
 generated
+.local-functions/
 *.zip
 
 *.js
