@@ -1,5 +1,5 @@
-import nodeFetch, { Headers, Request, RequestInit } from "node-fetch";
 import { PassThrough, Readable } from "stream";
+import nodeFetch, { Headers, Request, RequestInit } from "node-fetch";
 import {
   Client,
   createClient as createClientBase
