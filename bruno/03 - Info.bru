@@ -1,0 +1,32 @@
+meta {
+  name: Info
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/info
+  body: none
+  auth: none
+}
+
+tests {
+  test("The application health check succeeds", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().name).to.equal("@pagopa/io-selfcare-importadesioni");
+    expect(res.getBody().version).to.be.a("string").and.not.empty;
+  });
+}
+
+docs {
+  Application health check returning name and version on success.
+  Restart the local launcher after updating it to enable this request.
+  Locally, an adapter reuses the real InfoHandler and checks Cosmos DB plus
+  Azurite Blob, Queue, and Table. Azure Files is excluded because Azurite does
+  not implement it. The production health check is unchanged.
+
+  A 200 response means the configured local dependencies passed their checks;
+  a 500 response means configuration or a dependency check failed.
+  Runtime Status only checks the Functions host, not these dependencies.
+  It does not enqueue or modify any membership.
+}

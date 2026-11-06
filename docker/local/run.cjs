@@ -36,7 +36,7 @@ const functions = [
 
 const values = {
   FUNCTIONS_WORKER_RUNTIME: "node",
-  "AzureWebJobs.Info.Disabled": "true",
+  "AzureWebJobs.Info.Disabled": "false",
   AzureWebJobsStorage: storageConnectionString,
   INTERNAL_STORAGE_CONNECTION_STRING: storageConnectionString,
   INTERNAL_STORAGE_FALLBACK_CONNECTION_STRING: storageConnectionString,
@@ -114,8 +114,11 @@ function start() {
   }
   for (const name of functions) {
     fs.mkdirSync(path.join(runtime, name), { recursive: true });
-    fs.copyFileSync(path.join(root, name, "function.json"),
-      path.join(runtime, name, "function.json"));
+    const binding = JSON.parse(fs.readFileSync(path.join(root, name, "function.json"), "utf8"));
+    if (name === "Info") {
+      binding.scriptFile = "../../docker/local/info.cjs";
+    }
+    fs.writeFileSync(path.join(runtime, name, "function.json"), JSON.stringify(binding, null, 2));
   }
   const host = JSON.parse(fs.readFileSync(path.join(root, "host.json"), "utf8"));
   host.logging.logLevel.default = "Information";

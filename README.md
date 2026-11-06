@@ -123,6 +123,19 @@ Re-seed before retrying. Running the collection in sequence performs steps 3-4
 only; the final Cosmos verification is still required. No background polling
 scripts are included in the collection.
 
+The collection also provides an [Info request](bruno/03%20-%20Info.bru) for
+`GET /api/v1/info`. When healthy, the endpoint returns HTTP `200` with the
+application `name` and `version`, checked by the request's test. Unlike Runtime
+Status, Info checks the configured dependencies, not just the Functions host.
+The local launcher uses [a local adapter](docker/local/info.cjs) that reuses the
+real `InfoHandler` and checks Cosmos DB plus Azurite Blob, Queue, and Table.
+Only Azure Files is excluded because Azurite does not implement it; the
+production health check is unchanged. Dependency/configuration errors produce
+HTTP `500`, not a simulated success. If a previously started launcher returns
+`404`, stop it and run `node docker/local/run.cjs start` again to regenerate the
+local bindings and enable Info. The Info request itself does not enqueue an
+import; the normal emulator/certificate setup must already be complete.
+
 ### Scope and troubleshooting
 
 - This test exercises the real HTTP handler, Cosmos DAO, Storage queue binding,
@@ -130,9 +143,9 @@ scripts are included in the collection.
 - `OnContractChange` is intentionally excluded: the seed supplies already
 	normalized data. Change feed processing, IPA CSV ingestion, real SelfCare
 	behavior, authentication, and production networking are not covered.
-- `Info` is disabled only in the local launcher: its shared health check also
-	probes Azure Files, which Azurite does not implement. Use `/admin/host/status`
-	for runtime readiness and `check` for actual import verification.
+- The local `Info` adapter checks Cosmos DB and Azurite Blob, Queue, and Table,
+	but not unsupported Azure Files. `/admin/host/status` checks runtime readiness;
+	`check` verifies an actual import. Production health checks are unchanged.
 - The second Azurite service is available with `docker compose --profile
 	extra-storage up -d`. It is not needed for this smoke test.
 - The old Functions and Traefik services remain under the `legacy` profile for
