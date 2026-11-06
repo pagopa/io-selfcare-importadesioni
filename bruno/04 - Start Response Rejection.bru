@@ -1,0 +1,39 @@
+meta {
+  name: Start Response Rejection
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/start?ipas={{brotliIpaCode}}&status=Initial
+  body: none
+  auth: none
+}
+
+params:query {
+  ipas: {{brotliIpaCode}}
+  status: Initial
+}
+
+tests {
+  test("The negative fixture was selected and queued", function () {
+    expect(res.getStatus()).to.equal(202);
+    expect(res.getBody()).to.be.an("array");
+    expect(res.getBody()).to.include(bru.getEnvVar("brotliIpaCode"));
+  });
+}
+
+docs {
+  Local-only response validation test using benign compressed data.
+  Build, seed, and restart the updated local launcher first.
+  The local SelfcareMock sends a non-identity encoded response for fiscal code
+  00000000001, even though the worker requests Accept-Encoding: identity.
+
+  This 202 confirms only submission. Inspect the selected membership in
+  importadesioni-local / memberships in Cosmos: expect Failed and a note
+  containing Unsupported Content-Encoding. Processed would fail this test.
+
+  Do not also submit the same negative fixture through the command-line checker.
+  Changing Accept-Encoding on the incoming Bruno request is not equivalent:
+  response validation applies to the downstream SelfCare response path.
+}

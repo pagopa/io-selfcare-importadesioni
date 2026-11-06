@@ -14,6 +14,7 @@ const key = Buffer.from("local-emulator-only").toString("base64");
 const databaseName = "importadesioni-local";
 const baseUrl = "http://127.0.0.1:7071";
 const ipaCode = "ente_test";
+const brotliIpaCode = "ente_brotli_test";
 const fiscalCode = "00000000000";
 const storageConnectionString = [
   "DefaultEndpointsProtocol=http",
@@ -70,7 +71,7 @@ async function seed() {
   ]) {
     await database.containers.createIfNotExists({ id, partitionKey });
   }
-  await database.container("contracts").items.upsert({
+  const contract = {
     id: "contratto-test",
     ipaCode,
     emailDate: "2021-12-06T17:33:40.000Z",
@@ -82,6 +83,12 @@ async function seed() {
       name: "contratto-test.p7m",
       path: "contratti-test/contratto-test.p7m"
     }
+  };
+  await database.container("contracts").items.upsert(contract);
+  await database.container("contracts").items.upsert({
+    ...contract,
+    id: "contratto-brotli-test",
+    ipaCode: brotliIpaCode
   });
   await database.container("pecDelegato").items.upsert({
     id: "delegato-test",
@@ -99,6 +106,14 @@ async function seed() {
     status: "Initial"
   });
   console.log(`Seed ready: ${databaseName}/memberships/${ipaCode} = Initial`);
+  await database.container("memberships").items.upsert({
+    id: brotliIpaCode,
+    ipaCode: brotliIpaCode,
+    fiscalCode: "00000000001",
+    mainInstitution: true,
+    status: "Initial"
+  });
+  console.log(`Seed ready: ${databaseName}/memberships/${brotliIpaCode} = Initial (Brotli rejection)`);
 }
 
 function start() {
@@ -117,6 +132,9 @@ function start() {
     const binding = JSON.parse(fs.readFileSync(path.join(root, name, "function.json"), "utf8"));
     if (name === "Info") {
       binding.scriptFile = "../../docker/local/info.cjs";
+    }
+    if (name === "SelfcareMock") {
+      binding.scriptFile = "../../docker/local/selfcare-mock.cjs";
     }
     fs.writeFileSync(path.join(runtime, name, "function.json"), JSON.stringify(binding, null, 2));
   }
@@ -152,35 +170,40 @@ function start() {
   }
 }
 
-async function check() {
-  const before = await database.container("memberships").item(ipaCode, ipaCode).read();
+async function check(rejectBrotli = false) {
+  const selectedIpaCode = rejectBrotli ? brotliIpaCode : ipaCode;
+  const expectedStatus = rejectBrotli ? "Failed" : "Processed";
+  const expectedNote = rejectBrotli ? "Unsupported Content-Encoding" : "Successful imported";
+  const before = await database.container("memberships").item(selectedIpaCode, selectedIpaCode).read();
   assert.equal(before.resource.status, "Initial", "Run the seed command before each smoke test");
-  const response = await fetch(`${baseUrl}/api/v1/start?ipas=${ipaCode}&status=Initial`, {
+  const response = await fetch(`${baseUrl}/api/v1/start?ipas=${selectedIpaCode}&status=Initial`, {
     method: "POST",
     timeout: 10000
   });
   const body = await response.text();
   console.log(`POST /api/v1/start -> ${response.status}\n${body}`);
   assert.equal(response.status, 202);
-  assert(body.includes(ipaCode), "The HTTP response must include the seeded membership");
+  assert(body.includes(selectedIpaCode), "The HTTP response must include the seeded membership");
   const deadline = Date.now() + 90000;
   while (Date.now() < deadline) {
-    const { resource } = await database.container("memberships").item(ipaCode, ipaCode).read();
+    const { resource } = await database.container("memberships").item(selectedIpaCode, selectedIpaCode).read();
     if (resource.status !== "Initial") {
       console.log(JSON.stringify({ ipaCode: resource.ipaCode, status: resource.status, note: resource.note }, null, 2));
-      assert.equal(resource.status, "Processed");
-      assert(resource.note.includes("Successful imported"));
-      console.log("PASS: HTTP -> Cosmos -> Azurite queue -> worker -> SelfcareMock -> Processed");
+      assert.equal(resource.status, expectedStatus);
+      assert(resource.note.includes(expectedNote));
+      console.log(rejectBrotli
+        ? "PASS: Brotli response rejected -> Failed with Unsupported Content-Encoding"
+        : "PASS: HTTP -> Cosmos -> Azurite queue -> worker -> SelfcareMock -> Processed");
       return;
     }
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  throw new Error("Timed out waiting for Processed; inspect the Functions terminal and poison queue");
+  throw new Error(`Timed out waiting for ${expectedStatus}; inspect the Functions terminal and poison queue`);
 }
 
 async function main() {
   const command = process.argv[2];
-  if (["seed", "check"].includes(command)) {
+  if (["seed", "check", "check-brotli"].includes(command)) {
     if (command === "seed") {
       await exportLocalCertificate();
     }
@@ -197,8 +220,10 @@ async function main() {
     start();
   } else if (command === "check") {
     await check();
+  } else if (command === "check-brotli") {
+    await check(true);
   } else {
-    throw new Error("Usage: node docker/local/run.cjs seed|start|check");
+    throw new Error("Usage: node docker/local/run.cjs seed|start|check|check-brotli");
   }
 }
 

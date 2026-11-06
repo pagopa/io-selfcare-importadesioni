@@ -37,8 +37,10 @@ node docker/local/run.cjs seed
 
 The seed creates database `importadesioni-local`, with containers `memberships`,
 `contracts`, and `pecDelegato`, using the application's partition keys. It upserts
-one fake institution (`ente_test`, fiscal code `00000000000`), one V2.3 contract,
-and one manager (`mario.rossi@example.com`). The membership starts as `Initial`.
+two fake institutions: `ente_test` (fiscal code `00000000000`) for the happy path
+and a second institution (fiscal code `00000000001`) for the negative encoding test.
+Each has a V2.3 contract and shares the fake manager
+`mario.rossi@example.com`. Both memberships start as `Initial`.
 Re-running the seed resets only these fixture documents; it does not delete the
 database. The attachment path is fictitious: this importer sends metadata, not
 file contents.
@@ -119,9 +121,9 @@ are needed. Bruno does not start Docker, run the seed, or launch Functions.
 The environment defaults are `baseUrl=http://127.0.0.1:7071`, `ipaCode=ente_test`,
 and `membershipStatus=Initial`. A `202` response with `[]` does not exercise the
 worker: it means no eligible membership matched, and the Bruno test fails.
-Re-seed before retrying. Running the collection in sequence performs steps 3-4
-only; the final Cosmos verification is still required. No background polling
-scripts are included in the collection.
+Re-seed before retrying. Running the collection in sequence submits the happy
+path and the negative fixture described below, but final Cosmos verification is
+still required. No background polling scripts are included in the collection.
 
 The collection also provides an [Info request](bruno/03%20-%20Info.bru) for
 `GET /api/v1/info`. When healthy, the endpoint returns HTTP `200` with the
@@ -135,6 +137,86 @@ HTTP `500`, not a simulated success. If a previously started launcher returns
 `404`, stop it and run `node docker/local/run.cjs start` again to regenerate the
 local bindings and enable Info. The Info request itself does not enqueue an
 import; the normal emulator/certificate setup must already be complete.
+
+### 5. Verify response rejection with Bruno
+
+After rebuilding, seeding, and restarting the updated local launcher, use the
+**Local** environment and send
+[Start Response Rejection](bruno/04%20-%20Start%20Response%20Rejection.bru).
+It selects the negative fixture configured in the Local environment. Do not
+also submit the same negative fixture through the command-line checker.
+The normal and negative fixtures are separate, so each can be submitted once
+after a single seed.
+
+The request must return `202` with an array containing the selected IPA code.
+The local-only
+[SelfCare mock adapter](docker/local/selfcare-mock.cjs) returns an ordinary
+compressed JSON response with a non-identity `Content-Encoding` for this institution,
+ignoring the worker's `Accept-Encoding: identity`. This is a safe regression
+fixture, not an exploit payload. The production SelfcareMock is unchanged.
+
+In Cosmos Data Explorer, inspect `importadesioni-local` / `memberships` /
+the IPA code returned by the request. The expected outcome is **Failed**, with a
+`note` containing `Unsupported Content-Encoding`. **Processed is a failed rejection test** for this
+fixture. The mock's Functions log also records the received `Accept-Encoding`.
+The worker's existing error handling records the rejection without crashing or
+changing the normal `201`/`409` success rules for uncompressed responses.
+
+Alternatively, instead of the happy-path Bruno POST, run this bounded check in
+a second terminal while the app is running:
+
+```sh
+node docker/local/run.cjs check
+```
+
+The check submits one fixture and exits after success or a 90-second wait.
+Stop the launcher with Ctrl+C and run `docker compose down` after testing.
+No additional daemon or polling process is started by the check.
+
+Changing `Accept-Encoding` on the incoming Bruno request is not an equivalent
+test. Response validation applies to the **downstream response** received by the
+SelfCare HTTP client, not the incoming import request.
+
+## HTTP response handling
+
+The verified local stack uses Node 16.9.1 and node-fetch 2.6.8.
+No runtime, package version, or lockfile is changed here.
+
+The [existing SelfCare transport](utils/selfcare.ts) now sends
+`Accept-Encoding: identity`, forces node-fetch's `compress: false`, and rejects
+any explicit `Content-Encoding` other than a single `identity` token before the
+generated client consumes the response. Missing encoding is accepted as-is;
+compressed bytes with absent/misleading encoding are never guessed or decoded.
+The transport preserves request options, authentication, cancellation, and body
+stream cleanup. Merely requesting identity without disabling automatic
+decompression would not protect against a server that ignores the request.
+
+This intentionally rejects gzip/deflate and unknown or ambiguous encodings too.
+Before rollout, verify that SelfCare and any intervening proxies honor identity.
+An encoded response, including a `201` or `409`, now follows the existing failure
+path rather than being accepted. No business selection/delegate/version rules
+are modified.
+
+This is a defense-in-depth mitigation for the direct SelfCare HTTP path, **not a
+replacement for upgrading vulnerable runtimes/libraries**. It does not patch
+Node's embedded libraries or cover every HTTP consumer inside transitive
+Azure SDK/common-library dependencies. Node 16 is end-of-life; a supported,
+vendor-patched runtime remains necessary for full remediation.
+
+The [transport tests](utils/__tests__/selfcare.test.ts) exercise real, temporary
+loopback HTTP servers with guaranteed cleanup. They instrument the four public
+decompression entry points, demonstrate the default node-fetch behavior,
+then verify no decoder calls on protected paths, including redirects,
+concurrency, malformed headers, body cancellation, and worker state updates.
+Only benign compressed data is used. Coverage before mitigation was zero for
+the wrapper; added pre-patch contract tests reached 94.7% line coverage. The
+mitigated wrapper reaches 100% lines and at least 95% branches. Coverage of the
+unmodified business-rule branches is not claimed to be complete.
+
+```sh
+npm test -- --runInBand --coverage --collectCoverageFrom='utils/selfcare.ts' --coverageThreshold='{"./utils/selfcare.ts":{"lines":100,"branches":95,"functions":90,"statements":95}}'
+npm run build
+```
 
 ### Scope and troubleshooting
 
